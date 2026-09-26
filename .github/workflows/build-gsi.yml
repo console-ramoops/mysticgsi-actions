@@ -1,0 +1,305 @@
+name: Build GSI
+
+on:
+  workflow_dispatch:
+    inputs:
+      rom_url:
+        description: 'Direct URL to firmware (OTA zip, factory image, super.img, etc.)'
+        required: true
+        type: string
+      rom_name:
+        description: 'Build identifier (folder name under out/)'
+        required: false
+        default: 'gsi'
+        type: string
+      rom_type:
+        description: 'ROM patch type (auto, pixel, hyperos, oneui, coloros, generic, etc.)'
+        required: false
+        default: 'auto'
+        type: string
+      variant_tag:
+        description: 'Custom tag appended to build name (e.g. vanilla, gapps)'
+        required: false
+        default: ''
+        type: string
+      compress:
+        description: 'Compress output into a ZIP archive (.zip)'
+        required: false
+        default: true
+        type: boolean
+      no_debloat:
+        description: 'Keep manufacturer apps (skip debloating)'
+        required: false
+        default: false
+        type: boolean
+      create_release:
+        description: 'Publish a GitHub Release with built assets'
+        required: false
+        default: true
+        type: boolean
+      release_tag:
+        description: 'Custom release tag (leave empty for automatic naming)'
+        required: false
+        default: ''
+        type: string
+      release_title:
+        description: 'Custom release title (leave empty for automatic naming)'
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        default: false
+        type: boolean
+      upload_artifact:
+        description: 'Upload build files as workflow artifacts'
+        required: false
+        default: true
+        type: boolean
+      retention_days:
+        description: 'Artifact retention days (1-90)'
+        required: false
+        default: 7
+        type: number
+  workflow_call:
+    inputs:
+      rom_url:
+        description: 'Direct URL to firmware'
+        required: true
+        type: string
+      rom_name:
+        description: 'Build identifier'
+        required: false
+        default: 'gsi'
+        type: string
+      rom_type:
+        description: 'ROM patch type'
+        required: false
+        default: 'auto'
+        type: string
+      variant_tag:
+        description: 'Custom tag appended to build name'
+        required: false
+        default: ''
+        type: string
+      compress:
+        description: 'Compress output into a ZIP archive'
+        required: false
+        default: true
+        type: boolean
+      no_debloat:
+        description: 'Keep manufacturer apps'
+        required: false
+        default: false
+        type: boolean
+      create_release:
+        description: 'Publish a GitHub Release'
+        required: false
+        default: true
+        type: boolean
+      release_tag:
+        description: 'Custom release tag'
+        required: false
+        default: ''
+        type: string
+      release_title:
+        description: 'Custom release title'
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        default: false
+        type: boolean
+      upload_artifact:
+        description: 'Upload build files as workflow artifacts'
+        required: false
+        default: true
+        type: boolean
+      retention_days:
+        description: 'Artifact retention days'
+        required: false
+        default: 7
+        type: number
+    secrets:
+      AVB_KEY:
+        description: 'Optional RSA private key for AVB signing (PEM format)'
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: build-gsi-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build GSI
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Free Disk Space
+        run: |
+          echo "=== Initial Runner Disk Space ==="
+          df -h /
+          echo "Cleaning unneeded pre-installed software to maximize build workspace..."
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/powershell \
+            /usr/local/share/vcpkg \
+            /var/lib/docker || true
+          sudo docker system prune -af --volumes || true
+          echo "=== Available Disk Space After Cleanup ==="
+          df -h /
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Native Tools
+        uses: actions/cache@v4
+        with:
+          path: tools/bin
+          key: tools-bin-${{ runner.os }}-${{ hashFiles('tools/build_android_tools.py') }}
+
+      - name: Cache Apktool
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/apktool*
+          key: apktool-${{ runner.os }}
+
+      - name: Install Host Dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./setup_host.py
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/tools/bin" >> $GITHUB_PATH
+
+      - name: Build GSI Image
+        id: build
+        env:
+          ROM_URL: ${{ inputs.rom_url }}
+          ROM_NAME: ${{ inputs.rom_name }}
+          ROM_TYPE: ${{ inputs.rom_type }}
+          VARIANT_TAG: ${{ inputs.variant_tag }}
+          COMPRESS: ${{ inputs.compress }}
+          NO_DEBLOAT: ${{ inputs.no_debloat }}
+          AVB_KEY: ${{ secrets.AVB_KEY }}
+        run: |
+          export PATH="$HOME/.local/bin:$GITHUB_WORKSPACE/tools/bin:$PATH"
+
+          # Assemble build arguments
+          ARGS=("build" "$ROM_NAME" "$ROM_URL")
+
+          if [ -n "$ROM_TYPE" ] && [ "$ROM_TYPE" != "auto" ]; then
+            ARGS+=("--type" "$ROM_TYPE")
+          fi
+
+          if [ -n "$VARIANT_TAG" ]; then
+            ARGS+=("--add" "$VARIANT_TAG")
+          fi
+
+          if [ "$COMPRESS" = "true" ]; then
+            ARGS+=("--compress")
+          fi
+
+          if [ "$NO_DEBLOAT" = "true" ]; then
+            ARGS+=("--no-debloat")
+          fi
+
+          if [ -n "${AVB_KEY:-}" ]; then
+            echo "Configuring custom AVB signing key..."
+            echo "$AVB_KEY" > /tmp/avb_key.pem
+            chmod 600 /tmp/avb_key.pem
+            ARGS+=("--avb-key" "/tmp/avb_key.pem")
+          fi
+
+          echo "Starting GSI build with: ${ARGS[*]}"
+          .venv/bin/python cli.py "${ARGS[@]}"
+          rm -f /tmp/avb_key.pem
+
+      - name: Prepare Release & Checksums
+        id: prepare
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          ROM_NAME: ${{ inputs.rom_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TITLE: ${{ inputs.release_title }}
+        run: |
+          python3 .github/scripts/prepare_release.py \
+            --build-name "$ROM_NAME" \
+            --release-tag "$RELEASE_TAG" \
+            --release-title "$RELEASE_TITLE"
+
+      - name: Upload Artifacts
+        if: ${{ inputs.upload_artifact && !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.output_name }}
+          path: |
+            ${{ steps.prepare.outputs.output_dir }}/*.img
+            ${{ steps.prepare.outputs.output_dir }}/*.zip
+            ${{ steps.prepare.outputs.output_dir }}/*.txt
+            ${{ steps.prepare.outputs.output_dir }}/*.sha256
+            ${{ steps.prepare.outputs.output_dir }}/*.md5
+            ${{ steps.prepare.outputs.output_dir }}/*.md
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: warn
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.create_release && !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.prepare.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.prepare.outputs.release_title }}
+          RELEASE_NOTES_FILE: ${{ steps.prepare.outputs.release_notes_file }}
+          ASSET_FILES: ${{ steps.prepare.outputs.asset_files }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          echo "Publishing release: $RELEASE_TAG ($RELEASE_TITLE)"
+          PRERELEASE_FLAG=()
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG+=("--prerelease")
+          fi
+
+          # If release already exists, upload assets with clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Uploading assets..."
+            # shellcheck disable=SC2086
+            gh release upload "$RELEASE_TAG" $ASSET_FILES --clobber
+          else
+            # Create new release with title, notes, and assets
+            # shellcheck disable=SC2086
+            gh release create "$RELEASE_TAG" $ASSET_FILES \
+              --title "$RELEASE_TITLE" \
+              --notes-file "$RELEASE_NOTES_FILE" \
+              "${PRERELEASE_FLAG[@]}"
+          fi
+
+      - name: Upload Failure Logs
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-logs
+          path: |
+            tmp/
+            out/
+          retention-days: 3
+          if-no-files-found: ignore
