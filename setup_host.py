@@ -165,14 +165,24 @@ def install_apktool():
         return
     bin_dir = os.path.join(os.path.expanduser("~"), ".local", "bin")
     log(f"Installing apktool into {bin_dir}")
+    url = None
     try:
-        with urllib.request.urlopen(APKTOOL_RELEASE, timeout=30) as response:
+        req = urllib.request.Request(
+            APKTOOL_RELEASE,
+            headers={"User-Agent": "MysticGSI-Setup"}
+        )
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=30) as response:
             assets = json.load(response)["assets"]
+        url = next((a["browser_download_url"] for a in assets
+                    if a["name"].startswith("apktool_")
+                    and a["name"].endswith(".jar")), None)
     except (OSError, ValueError, KeyError) as e:
-        die(f"cannot query the latest apktool release: {e}")
-    url = next((a["browser_download_url"] for a in assets
-                if a["name"].startswith("apktool_")
-                and a["name"].endswith(".jar")), None)
+        warn(f"cannot query latest apktool release ({e}); trying fallback")
+        url = ("https://github.com/iBotPeaches/Apktool/releases/download/"
+               "v3.0.3/apktool_3.0.3.jar")
     if not url:
         die("the latest apktool release has no jar")
 
@@ -231,8 +241,8 @@ def setup_macos():
 
 def setup_debian():
     log("Installing apt packages")
-    as_root(["apt-get", "update"])
-    as_root(["apt-get", "install", "-y"] + APT_PACKAGES)
+    as_root(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update"])
+    as_root(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y"] + APT_PACKAGES)
 
     make_venv("python3")
     install_apktool()
