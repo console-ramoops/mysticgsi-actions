@@ -241,8 +241,9 @@ def setup_macos():
 
 def setup_debian():
     log("Installing apt packages")
-    as_root(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update"])
-    as_root(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y"] + APT_PACKAGES)
+    noninteractive = ["env", "DEBIAN_FRONTEND=noninteractive"]
+    as_root(noninteractive + ["apt-get", "update"])
+    as_root(noninteractive + ["apt-get", "install", "-y"] + APT_PACKAGES)
 
     make_venv("python3")
     install_apktool()

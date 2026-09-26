@@ -3,7 +3,7 @@
 Prepares MysticGSI build outputs for GitHub Actions artifacts and releases.
 - Scans build outputs (tmp/gsilist.json and out/<name>/)
 - Computes SHA-256 and MD5 checksums
-- Enforces GitHub Release file size limits (2 GiB) with automatic zip fallback
+- Enforces GitHub Release file size limits (2 GiB) with zip fallback
 - Generates structured markdown release notes
 - Exports outputs to $GITHUB_OUTPUT for subsequent workflow steps
 """
@@ -59,7 +59,8 @@ def compress_img_to_zip(img_path: str, zip_path: str) -> None:
         allowZip64=True,
     ) as zf:
         zf.write(img_path, arcname="system.img")
-    print(f"Compressed {img_path} -> {zip_path} ({human_size(os.path.getsize(zip_path))})", flush=True)
+    sz = human_size(os.path.getsize(zip_path))
+    print(f"Compressed {img_path} -> {zip_path} ({sz})", flush=True)
 
 
 def find_build_info(build_name: str, out_dir: str):
@@ -72,18 +73,19 @@ def find_build_info(build_name: str, out_dir: str):
             with open(gsilist_path, "r", encoding="utf-8") as f:
                 entries = json.load(f)
             matching = [e for e in entries if e.get("rom_name") == build_name]
-            entry = matching[-1] if matching else (entries[-1] if entries else None)
+            entry = matching[-1] if matching else (
+                entries[-1] if entries else None)
             if entry:
                 output_name = entry.get("output_name")
                 output_path = entry.get("output_path")
         except Exception as e:
-            print(f"warning: error reading {gsilist_path}: {e}", file=sys.stderr)
+            print(f"warning: error reading {gsilist_path}: {e}",
+                  file=sys.stderr)
 
     if not out_dir:
         out_dir = f"out/{build_name}" if build_name else "out"
 
     if not output_name and os.path.isdir(out_dir):
-        # Look for images in out_dir
         for fname in sorted(os.listdir(out_dir)):
             if fname.endswith(".img") or fname.endswith(".zip"):
                 output_name = fname.rsplit(".", 1)[0]
@@ -115,19 +117,23 @@ def generate_release_notes(
     raw_size = metadata.get("Raw Image Size", "Unknown")
     fingerprint = metadata.get("Build fingerprint", "Unknown")
 
-    manufacturer = f"{device_brand} / {device_mfr}" if device_brand and device_mfr and device_brand != device_mfr else (device_brand or device_mfr or "Unknown")
+    if device_brand and device_mfr and device_brand != device_mfr:
+        mfr = f"{device_brand} / {device_mfr}"
+    else:
+        mfr = device_brand or device_mfr or "Unknown"
 
     notes = [
         f"# MysticGSI Release: `{output_name}`",
         "",
-        "Generic System Image (GSI) built with [MysticGSI](https://github.com/MysticGSI/mysticgsi).",
+        "Generic System Image (GSI) built with "
+        "[MysticGSI](https://github.com/MysticGSI/mysticgsi).",
         "",
         "## 📱 Build Specifications",
         "",
         "| Attribute | Value |",
         "|---|---|",
         f"| **Target Model** | {device_model} (`{device_codename}`) |",
-        f"| **Manufacturer** | {manufacturer} |",
+        f"| **Manufacturer** | {mfr} |",
         f"| **Android Version** | Android {android_ver} (API {android_sdk}) |",
         f"| **Build ID** | `{build_id}` |",
         f"| **Security Patch** | `{security_patch}` |",
@@ -142,17 +148,20 @@ def generate_release_notes(
     ]
 
     for item in file_info:
-        notes.append(f"| `{item['name']}` | {item['size_human']} | `{item['sha256']}` |")
+        row = f"| `{item['name']}` | {item['size_human']} | `{item['sha256']}` |"
+        notes.append(row)
 
     if omitted_large_files:
         notes.extend([
             "",
             "> [!NOTE]",
-            "> The following raw image(s) exceed GitHub's 2 GiB per-asset release limit and are excluded from direct release assets:",
+            "> The following raw image(s) exceed GitHub's 2 GiB per-asset "
+            "release limit and are excluded from direct release assets:",
         ])
         for f in omitted_large_files:
             notes.append(f"> - `{f['name']}` ({f['size_human']})")
-        notes.append("> Please download the corresponding `.zip` package and extract `system.img` before flashing.")
+        notes.append("> Please download the corresponding `.zip` package "
+                     "and extract `system.img` before flashing.")
 
     notes.extend([
         "",
@@ -184,43 +193,49 @@ def generate_release_notes(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare MysticGSI release assets.")
-    parser.add_argument("--build-name", default="gsi", help="Build name passed to cli.py")
-    parser.add_argument("--output-dir", default="", help="Custom output directory")
-    parser.add_argument("--release-tag", default="", help="Custom release tag")
-    parser.add_argument("--release-title", default="", help="Custom release title")
-    parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT", ""),
+    parser = argparse.ArgumentParser(
+        description="Prepare MysticGSI release assets.")
+    parser.add_argument("--build-name", default="gsi",
+                        help="Build name passed to cli.py")
+    parser.add_argument("--output-dir", default="",
+                        help="Custom output directory")
+    parser.add_argument("--release-tag", default="",
+                        help="Custom release tag")
+    parser.add_argument("--release-title", default="",
+                        help="Custom release title")
+    parser.add_argument("--github-output",
+                        default=os.environ.get("GITHUB_OUTPUT", ""),
                         help="Path to GITHUB_OUTPUT file")
     args = parser.parse_args()
 
-    output_name, output_path, out_dir = find_build_info(args.build_name, args.output_dir)
+    output_name, output_path, out_dir = find_build_info(
+        args.build_name, args.output_dir)
     print(f"Output name: {output_name}")
     print(f"Output path: {output_path}")
     print(f"Output directory: {out_dir}")
 
     if not os.path.isdir(out_dir):
-        print(f"error: output directory '{out_dir}' not found", file=sys.stderr)
+        print(f"error: output directory '{out_dir}' not found",
+              file=sys.stderr)
         return 1
 
     img_file = f"{output_path}.img"
     zip_file = f"{output_path}.zip"
     output_txt = os.path.join(out_dir, "output.txt")
 
-    # If .img exists and is > 2GB but .zip does not exist, auto-compress to .zip
     if os.path.isfile(img_file):
         img_size = os.path.getsize(img_file)
         if img_size > GITHUB_RELEASE_MAX_BYTES and not os.path.isfile(zip_file):
-            print(f"Raw image {img_file} is {human_size(img_size)} (> 2 GiB). Creating zip...", flush=True)
+            print(f"Raw image {img_file} is {human_size(img_size)} (> 2 GiB). "
+                  "Creating zip...", flush=True)
             compress_img_to_zip(img_file, zip_file)
 
-    # Gather binary assets (.img, .zip)
     binary_assets = []
     if os.path.isfile(zip_file):
         binary_assets.append(zip_file)
     if os.path.isfile(img_file):
         binary_assets.append(img_file)
 
-    # Compute checksums
     file_info = []
     sha256_lines = []
     md5_lines = []
@@ -242,7 +257,6 @@ def main():
         sha256_lines.append(f"{sha256}  {fname}")
         md5_lines.append(f"{md5}  {fname}")
 
-    # Write checksum files
     sha256_path = os.path.join(out_dir, "checksums.sha256")
     md5_path = os.path.join(out_dir, "checksums.md5")
 
@@ -251,13 +265,13 @@ def main():
     with open(md5_path, "w", encoding="utf-8") as f:
         f.write("\n".join(md5_lines) + "\n")
 
-    # Filter release assets by GitHub 2 GiB limit
     release_assets = []
     omitted_large = []
 
     for item in file_info:
         if item["size"] > GITHUB_RELEASE_MAX_BYTES:
-            print(f"Skipping direct release upload for {item['name']} ({item['size_human']} > 2 GiB limit)")
+            print(f"Skipping direct release upload for {item['name']} "
+                  f"({item['size_human']} > 2 GiB limit)")
             omitted_large.append(item)
         else:
             release_assets.append(item["path"])
@@ -269,11 +283,10 @@ def main():
     if os.path.isfile(output_txt):
         release_assets.append(output_txt)
 
-    # Parse metadata
     metadata = parse_metadata(output_txt)
 
-    # Generate release notes
-    release_notes_md = generate_release_notes(output_name, metadata, file_info, omitted_large)
+    release_notes_md = generate_release_notes(
+        output_name, metadata, file_info, omitted_large)
     release_notes_file = os.path.join(out_dir, "release_notes.md")
     with open(release_notes_file, "w", encoding="utf-8") as f:
         f.write(release_notes_md)
@@ -285,7 +298,6 @@ def main():
     for a in release_assets:
         print(f" - {a} ({human_size(os.path.getsize(a))})")
 
-    # Export to GITHUB_OUTPUT
     if args.github_output:
         print(f"\nWriting step outputs to {args.github_output}...")
         with open(args.github_output, "a", encoding="utf-8") as f:
@@ -294,10 +306,12 @@ def main():
             f.write(f"release_tag={tag}\n")
             f.write(f"release_title={title}\n")
             f.write(f"release_notes_file={release_notes_file}\n")
-            f.write(f"img_path={img_file if os.path.isfile(img_file) else ''}\n")
-            f.write(f"zip_path={zip_file if os.path.isfile(zip_file) else ''}\n")
-            # Space-separated list of quoted paths for bash CLI
-            f.write(f"asset_files={' '.join(f'{path}' for path in release_assets)}\n")
+            img_val = img_file if os.path.isfile(img_file) else ''
+            zip_val = zip_file if os.path.isfile(zip_file) else ''
+            f.write(f"img_path={img_val}\n")
+            f.write(f"zip_path={zip_val}\n")
+            assets_str = ' '.join(f'{path}' for path in release_assets)
+            f.write(f"asset_files={assets_str}\n")
 
     return 0
 
