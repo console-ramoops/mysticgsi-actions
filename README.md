@@ -145,6 +145,47 @@ rebuilt and resized to fit, without redoing the whole build.
 
 `clean` deletes everything under `tmp/` and `out/`.
 
+## GitHub Actions
+
+You can build GSIs directly in GitHub Actions without installing anything locally.
+
+### Triggering a Build
+
+1. Go to your repository on GitHub and open the **Actions** tab.
+2. Select the **Build GSI** workflow in the left sidebar.
+3. Click **Run workflow**, fill in the parameters, and click the green **Run workflow** button.
+
+### Workflow Inputs
+
+| Input | Type | Default | Description |
+|---|---|---|---|
+| `rom_url` | String | *(Required)* | Direct download link to firmware (`payload.bin`, factory image, `super.img`, `.tar`, `.ozip`, etc.) |
+| `rom_name` | String | `gsi` | Build identifier naming `out/<rom_name>/` |
+| `rom_type` | String | `auto` | ROM patch type (`auto`, `pixel`, `hyperos`, `oneui`, `coloros`, `generic`, etc.) |
+| `variant_tag` | String | *(empty)* | Optional tag appended to build name (e.g. `vanilla`, `gapps`) |
+| `compress` | Boolean | `true` | Package output image into a `.zip` archive containing `system.img` |
+| `no_debloat` | Boolean | `false` | Keep manufacturer apps that would otherwise be debloated |
+| `create_release` | Boolean | `true` | Automatically publish a GitHub Release with built assets |
+| `release_tag` | String | *(empty)* | Custom release tag (defaults to build output name if blank) |
+| `release_title` | String | *(empty)* | Custom release title (defaults to build output name if blank) |
+| `prerelease` | Boolean | `false` | Mark the GitHub Release as a pre-release |
+| `upload_artifact` | Boolean | `true` | Upload built images and metadata to GitHub Actions run artifacts |
+| `retention_days` | Number | `7` | Artifact retention period in days (1-90) |
+
+### Releases & Outputs
+
+When a build completes, the workflow produces:
+
+- **GitHub Release** (if `create_release` is enabled):
+  - Compressed `.zip` containing `system.img` (and raw `.img` if <= 2 GiB)
+  - `output.txt`: complete ROM and device hardware details
+  - `checksums.sha256` and `checksums.md5`: integrity verification hashes
+  - Formatted release notes with device specifications, download table, and fastboot flashing instructions
+- **Workflow Run Artifacts** (if `upload_artifact` is enabled):
+  - Downloadable directly from the GitHub Actions run summary page.
+- **Custom AVB Signing**:
+  - Store an unencrypted RSA private key (2048, 4096, or 8192 bits) in GitHub Repository Secrets as `AVB_KEY` to sign with your own key instead of the AOSP test key.
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
