@@ -174,6 +174,7 @@ You can build GSIs directly in GitHub Actions without installing anything locall
 | `release_title` | String | *(empty)* | Custom release title (defaults to build output name if blank) |
 | `prerelease` | Boolean | `false` | Mark the GitHub Release as a pre-release |
 | `upload_artifact` | Boolean | `true` | Upload built images and metadata to GitHub Actions run artifacts |
+| `upload_to_gofile` | Boolean | `false` | Upload built images to GoFile (also automatic for >2GB files or release failures) |
 | `retention_days` | Number | `7` | Artifact retention period in days (1-90) |
 
 ### Releases & Outputs
@@ -185,6 +186,10 @@ When a build completes, the workflow produces:
   - `output.txt`: complete ROM and device hardware details
   - `checksums.sha256` and `checksums.md5`: integrity verification hashes
   - Formatted release notes with device specifications, download table, and fastboot flashing instructions
+- **GoFile Uploads** (automatic fallback and large-file mirror):
+  - When assets exceed GitHub Releases' 2 GiB upload limit, they are automatically uploaded to [GoFile](https://gofile.io) and linked in the release notes and workflow summary.
+  - If GitHub Release creation fails or is disabled, all assets automatically fall back to GoFile upload with instant download links.
+  - You can also force upload all assets to GoFile by enabling `upload_to_gofile`.
 - **Workflow Run Artifacts** (if `upload_artifact` is enabled):
   - Downloadable directly from the GitHub Actions run summary page.
 - **Custom AVB Signing**:

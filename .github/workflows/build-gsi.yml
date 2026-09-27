@@ -57,6 +57,11 @@ on:
         required: false
         default: true
         type: boolean
+      upload_to_gofile:
+        description: 'Upload built images to GoFile (always, or automatically when GitHub Release exceeds 2GB or fails)'
+        required: false
+        default: false
+        type: boolean
       retention_days:
         description: 'Artifact retention days (1-90)'
         required: false
@@ -117,6 +122,11 @@ on:
         description: 'Upload build files as workflow artifacts'
         required: false
         default: true
+        type: boolean
+      upload_to_gofile:
+        description: 'Upload to GoFile'
+        required: false
+        default: false
         type: boolean
       retention_days:
         description: 'Artifact retention days'
@@ -263,8 +273,29 @@ jobs:
           retention-days: ${{ inputs.retention_days }}
           if-no-files-found: warn
 
+      - name: Upload Oversized Assets to GoFile
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && (steps.prepare.outputs.has_oversized == 'true' || inputs.upload_to_gofile) }}
+        env:
+          RELEASE_NOTES_FILE: ${{ steps.prepare.outputs.release_notes_file }}
+        run: |
+          TARGET_FILES=""
+          if [ "${{ inputs.upload_to_gofile }}" = "true" ]; then
+            echo "Uploading all assets to GoFile..."
+            TARGET_FILES="${{ steps.prepare.outputs.all_files }}"
+          else
+            echo "Uploading oversized (>2GB) assets to GoFile..."
+            TARGET_FILES="${{ steps.prepare.outputs.oversized_files }}"
+          fi
+
+          if [ -n "$TARGET_FILES" ]; then
+            # shellcheck disable=SC2086
+            bash ./.github/scripts/upload_gofile.sh $TARGET_FILES
+          fi
+
       - name: Publish GitHub Release
+        id: release
         if: ${{ inputs.create_release && !cancelled() && steps.build.outcome == 'success' }}
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.prepare.outputs.release_tag }}
@@ -292,6 +323,15 @@ jobs:
               --notes-file "$RELEASE_NOTES_FILE" \
               "${PRERELEASE_FLAG[@]}"
           fi
+
+      - name: Fallback Upload to GoFile on Release Failure
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && (steps.release.outcome == 'failure' || (!inputs.create_release && !inputs.upload_to_gofile)) }}
+        env:
+          RELEASE_NOTES_FILE: ${{ steps.prepare.outputs.release_notes_file }}
+        run: |
+          echo "::warning::GitHub Release creation was not possible or failed. Falling back to GoFile upload..."
+          # shellcheck disable=SC2086
+          bash ./.github/scripts/upload_gofile.sh ${{ steps.prepare.outputs.all_files }}
 
       - name: Upload Failure Logs
         if: ${{ failure() && steps.build.outcome == 'failure' }}

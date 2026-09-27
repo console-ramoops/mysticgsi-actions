@@ -148,7 +148,8 @@ def generate_release_notes(
     ]
 
     for item in file_info:
-        row = f"| `{item['name']}` | {item['size_human']} | `{item['sha256']}` |"
+        row = (f"| `{item['name']}` | {item['size_human']} | "
+               f"`{item['sha256']}` |")
         notes.append(row)
 
     if omitted_large_files:
@@ -167,7 +168,7 @@ def generate_release_notes(
         "",
         "## ⚡ Flashing Instructions",
         "",
-        "1. Extract `system.img` if you downloaded a compressed `.zip` package.",
+        "1. Extract `system.img` if downloaded as a `.zip` package.",
         "2. Boot your target device into fastbootd mode:",
         "   ```bash",
         "   adb reboot fastboot",
@@ -225,7 +226,8 @@ def main():
 
     if os.path.isfile(img_file):
         img_size = os.path.getsize(img_file)
-        if img_size > GITHUB_RELEASE_MAX_BYTES and not os.path.isfile(zip_file):
+        if (img_size > GITHUB_RELEASE_MAX_BYTES
+                and not os.path.isfile(zip_file)):
             print(f"Raw image {img_file} is {human_size(img_size)} (> 2 GiB). "
                   "Creating zip...", flush=True)
             compress_img_to_zip(img_file, zip_file)
@@ -312,6 +314,19 @@ def main():
             f.write(f"zip_path={zip_val}\n")
             assets_str = ' '.join(f'{path}' for path in release_assets)
             f.write(f"asset_files={assets_str}\n")
+            all_list = [item["path"] for item in file_info]
+            if os.path.isfile(sha256_path):
+                all_list.append(sha256_path)
+            if os.path.isfile(md5_path):
+                all_list.append(md5_path)
+            if os.path.isfile(output_txt):
+                all_list.append(output_txt)
+            all_str = ' '.join(f'{path}' for path in all_list)
+            f.write(f"all_files={all_str}\n")
+            over_str = ' '.join(f'{item["path"]}' for item in omitted_large)
+            f.write(f"oversized_files={over_str}\n")
+            has_over = 'true' if omitted_large else 'false'
+            f.write(f"has_oversized={has_over}\n")
 
     return 0
 
