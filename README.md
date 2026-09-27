@@ -125,9 +125,10 @@ The image ends up in `out/<name>/`. `--compress` creates a ZIP containing
 `system.img` at its root. `--add <tag>` adds a tag to the build name, and
 `--no-debloat` keeps the apps the ROM's patch set would otherwise remove.
 
-`--type` picks the patch set for the ROM you're porting (`hyperos`, `coloros`,
-`oneui`, `pixel`, ...). See `ls patches/<sdk>` for the list. Without it only
-generic patches are applied, unless it's a custom ROM like LineageOS.
+`--type` picks the patch set for the ROM you're porting (`alos`, `hyperos`,
+`coloros`, `oneui`, `pixel`, ...). See `ls patches/<sdk>` for the list.
+Without it only generic patches are applied, unless it's a custom ROM like
+LineageOS.
 
 Example:
 
@@ -138,6 +139,9 @@ Example:
 ```
 
 The build summary says whether the image is 64-bit only or 32/64-bit.
+Builds and rebuilds warn when core executables contain selected SVE/SVE2,
+SME, BF16, I8MM, MOPS, or CSSC instructions. Runtime CPU checks may provide
+fallbacks; no warning does not guarantee compatibility with older CPUs.
 
 To tweak a finished build, edit its system tree in `tmp/<name>/images/system/`
 (delete apps, add files) and run `cli.py rebuild <name>`. The image is
