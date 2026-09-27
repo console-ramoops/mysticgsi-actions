@@ -18,15 +18,19 @@ def _set_label(path, label):
     """Tags path with security.selinux; False if this host can't."""
     if hasattr(os, "setxattr"):
         try:
-            os.setxattr(path, "security.selinux", label.encode() + b"\0",
-                        follow_symlinks=False)
+            os.setxattr(
+                path, "security.selinux", label.encode() + b"\0", follow_symlinks=False
+            )
             return True
         except OSError:
             return False
     # macOS keeps any xattr name for ordinary users.
-    return subprocess.run(
-        ["xattr", "-s", "-w", "security.selinux", label, path],
-        capture_output=True).returncode == 0
+    return (
+        subprocess.run(
+            ["xattr", "-s", "-w", "security.selinux", label, path], capture_output=True
+        ).returncode
+        == 0
+    )
 
 
 def _labelled_tree(src):
@@ -59,14 +63,14 @@ def test_erofs_labels_match_source(tmp_path, options):
     src.mkdir()
     labels = _labelled_tree(src)
     image = str(tmp_path / "test.img")
-    subprocess.run([MKFS_EROFS, "-T0", *options, image, str(src)],
-                   check=True, capture_output=True)
+    subprocess.run(
+        [MKFS_EROFS, "-T0", *options, image, str(src)], check=True, capture_output=True
+    )
 
     assert read_labels(image, "erofs") == labels
 
 
-@pytest.mark.skipif(not (MKE2FS and E2FSDROID),
-                    reason="needs mke2fs and e2fsdroid")
+@pytest.mark.skipif(not (MKE2FS and E2FSDROID), reason="needs mke2fs and e2fsdroid")
 # 128-byte inodes have no room for xattrs, so labels go to an xattr block.
 @pytest.mark.parametrize("inode_size", [256, 128])
 def test_ext4_labels_match_file_contexts(tmp_path, inode_size):
@@ -75,22 +79,42 @@ def test_ext4_labels_match_file_contexts(tmp_path, inode_size):
     (src / "d" / "plain").write_bytes(b"x")
     (src / "d" / "special").write_bytes(b"y")
     contexts = tmp_path / "file_contexts"
-    contexts.write_text("/ u:object_r:rootfs:s0\n"
-                        "/lost\\+found u:object_r:rootfs:s0\n"
-                        "/d(/.*)? u:object_r:system_file:s0\n"
-                        "/d/special u:object_r:special_file:s0\n")
+    contexts.write_text(
+        "/ u:object_r:rootfs:s0\n"
+        "/lost\\+found u:object_r:rootfs:s0\n"
+        "/d(/.*)? u:object_r:system_file:s0\n"
+        "/d/special u:object_r:special_file:s0\n"
+    )
     image = str(tmp_path / "system.img")
     subprocess.run(
-        [MKE2FS, "-q", "-O", "^has_journal", "-t", "ext4", "-b", "4096",
-         "-I", str(inode_size), image, "2048"],
+        [
+            MKE2FS,
+            "-q",
+            "-O",
+            "^has_journal",
+            "-t",
+            "ext4",
+            "-b",
+            "4096",
+            "-I",
+            str(inode_size),
+            image,
+            "2048",
+        ],
         env=dict(os.environ, MKE2FS_CONFIG=MKE2FS_CONFIG),
-        check=True, capture_output=True)
-    subprocess.run([E2FSDROID, "-e", "-S", str(contexts), "-f", str(src),
-                    "-a", "/", image], check=True, capture_output=True)
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [E2FSDROID, "-e", "-S", str(contexts), "-f", str(src), "-a", "/", image],
+        check=True,
+        capture_output=True,
+    )
 
     labels = read_labels(image, "ext4")
-    assert {path: labels.get(path)
-            for path in ("/", "/d", "/d/plain", "/d/special")} == {
+    assert {
+        path: labels.get(path) for path in ("/", "/d", "/d/plain", "/d/special")
+    } == {
         "/": "u:object_r:rootfs:s0",
         "/d": "u:object_r:system_file:s0",
         "/d/plain": "u:object_r:system_file:s0",

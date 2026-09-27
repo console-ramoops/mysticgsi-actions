@@ -21,15 +21,14 @@ def _programs(xml_paths):
             root = ElementTree.parse(xml_path).getroot()
         except ElementTree.ParseError:
             continue
-        for prog in root.iter('program'):
-            filename = prog.get('filename', '')
-            if not filename or filename == 'NONE':
+        for prog in root.iter("program"):
+            filename = prog.get("filename", "")
+            if not filename or filename == "NONE":
                 continue
-            label = (prog.get('label') or filename.split('.')[0]).lower()
+            label = (prog.get("label") or filename.split(".")[0]).lower()
             try:
-                start = int(prog.get('start_sector', '0'))
-                sector_size = int(prog.get('SECTOR_SIZE_IN_BYTES',
-                                           DEFAULT_SECTOR_SIZE))
+                start = int(prog.get("start_sector", "0"))
+                sector_size = int(prog.get("SECTOR_SIZE_IN_BYTES", DEFAULT_SECTOR_SIZE))
             except ValueError:
                 continue
             yield label, start, sector_size, filename
@@ -41,9 +40,9 @@ def _assemble(pieces, out_path: str):
     # A piece may itself be named <part>.img, so build next to it.
     tmp_path = f"{out_path}.qfil.tmp"
     end = 0
-    with open(tmp_path, 'wb') as out_f:
+    with open(tmp_path, "wb") as out_f:
         for start, sector_size, path in sorted(pieces):
-            with open(path, 'rb') as in_f:
+            with open(path, "rb") as in_f:
                 offset = (start - first) * sector_size
                 end = max(end, sparse.expand(in_f, out_f, offset))
         out_f.truncate(end)
@@ -57,22 +56,18 @@ def process_qfil(
     directory: str,
     output_dir: str,
     target_partitions: Optional[Set[str]] = None,
-    logger=None
+    logger=None,
 ) -> List[str]:
     os.makedirs(output_dir, exist_ok=True)
-    xml_files = sorted(
-        glob.glob(os.path.join(directory, "rawprogram*.xml")))
-    preferred = [x for x in xml_files
-                 if "unsparse" in os.path.basename(x).lower()]
+    xml_files = sorted(glob.glob(os.path.join(directory, "rawprogram*.xml")))
+    preferred = [x for x in xml_files if "unsparse" in os.path.basename(x).lower()]
 
-    targets = ({p.lower() for p in target_partitions}
-               if target_partitions else None)
+    targets = {p.lower() for p in target_partitions} if target_partitions else None
     groups: Dict[str, List[Tuple[int, int, str]]] = {}
-    for label, start, sector_size, filename in _programs(
-            preferred or xml_files):
-        if label.endswith('_b'):
+    for label, start, sector_size, filename in _programs(preferred or xml_files):
+        if label.endswith("_b"):
             continue
-        part = label[:-2] if label.endswith('_a') else label
+        part = label[:-2] if label.endswith("_a") else label
         if targets is not None and part not in targets:
             continue
         # Archive extraction flattens paths, so match on the basename.
@@ -83,8 +78,7 @@ def process_qfil(
     extracted = []
     for part, pieces in groups.items():
         if logger:
-            logger(f"Assembling QFIL partition {part} "
-                   f"from {len(pieces)} file(s)...")
+            logger(f"Assembling QFIL partition {part} from {len(pieces)} file(s)...")
         out_path = os.path.join(output_dir, f"{part}.img")
         _assemble(pieces, out_path)
         extracted.append(out_path)

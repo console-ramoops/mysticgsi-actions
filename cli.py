@@ -65,7 +65,7 @@ def get_filename(url):
         disposition = headers.get("Content-Disposition")
         if disposition:
             name = disposition.split("filename=")[1].split(";")[0]
-            return safe_filename(name.replace('"', ''))
+            return safe_filename(name.replace('"', ""))
     except Exception:
         pass
     return safe_filename(os.path.basename(url))
@@ -91,30 +91,46 @@ def write_list(entries):
 
 def append_list(wt: make.RomPorter):
     entries = read_list()
-    entries.append({
-        "rom_name": wt.rom_name,
-        "variant_tag": wt.variant_tag,
-        "override_rom_type": wt.override_rom_type,
-        "rom_type": wt.rom_type,
-        "output": wt.output,
-        "output_name": wt.output_name,
-        "output_path": wt.output_path,
-    })
+    entries.append(
+        {
+            "rom_name": wt.rom_name,
+            "variant_tag": wt.variant_tag,
+            "override_rom_type": wt.override_rom_type,
+            "rom_type": wt.rom_type,
+            "output": wt.output,
+            "output_name": wt.output_name,
+            "output_path": wt.output_path,
+        }
+    )
     write_list(entries)
 
 
 def fetch(url, out_dir):
     if not shutil.which("aria2c"):
-        print("aria2c not found on PATH -- install it, or pass a local file "
-              "instead of a URL.", file=sys.stderr)
+        print(
+            "aria2c not found on PATH -- install it, or pass a local file "
+            "instead of a URL.",
+            file=sys.stderr,
+        )
         return None
 
     os.makedirs(out_dir, exist_ok=True)
     name = get_filename(url)
     path = os.path.join(out_dir, name)
 
-    rc = fsops.run(["aria2c", "-x16", "-s16", "--continue=true",
-                    "--dir", out_dir, "--out", name, url])
+    rc = fsops.run(
+        [
+            "aria2c",
+            "-x16",
+            "-s16",
+            "--continue=true",
+            "--dir",
+            out_dir,
+            "--out",
+            name,
+            url,
+        ]
+    )
     if rc != 0 or not os.path.exists(path):
         print(f"download failed (aria2c exited {rc})", file=sys.stderr)
         return None
@@ -136,8 +152,7 @@ def cmd_build(args):
     try:
         wt = make.RomPorter(args.name, args.add)
         wt.rom_type = make.safe_name(rom_type, "rom_type")
-        wt.override_rom_type = make.safe_name(
-            rom_custom or "default", "rom_custom")
+        wt.override_rom_type = make.safe_name(rom_custom or "default", "rom_custom")
     except ValueError as e:
         print(e, file=sys.stderr)
         return 2
@@ -177,8 +192,7 @@ def cmd_build(args):
 
 def cmd_rebuild(args):
     entries = read_list()
-    entry = next((e for e in reversed(entries)
-                  if e.get("rom_name") == args.name), None)
+    entry = next((e for e in reversed(entries) if e.get("rom_name") == args.name), None)
     if entry is None:
         print(f"no build named {args.name!r} in {GSILIST}", file=sys.stderr)
         return 1
@@ -199,8 +213,7 @@ def cmd_rebuild(args):
         if args.compress and wt.compress_output() != 0:
             print("compression failed", file=sys.stderr)
             return 1
-        entry["output"] = make.replace_image_size(entry["output"],
-                                                  system_size)
+        entry["output"] = make.replace_image_size(entry["output"], system_size)
         write_list(entries)
 
     print(f"\n{wt.output_path}.img ({make.bytes_to_human(system_size)})")
@@ -224,8 +237,7 @@ def cmd_list(args):
 
 def cmd_clean(args):
     with buildlock.hold(on_busy=wait_for_lock):
-        targets = [e for d in ("tmp", "out")
-                   for e in glob.glob(os.path.join(d, "*"))]
+        targets = [e for d in ("tmp", "out") for e in glob.glob(os.path.join(d, "*"))]
         if not targets:
             print("nothing to clean")
             return 0
@@ -267,48 +279,50 @@ def avb_key_path(value):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="CLI entry point for mysticgsi builds.")
+    ap = argparse.ArgumentParser(description="CLI entry point for mysticgsi builds.")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    build = sub.add_parser(
-        "build", help="build a GSI from a URL or a local file")
+    build = sub.add_parser("build", help="build a GSI from a URL or a local file")
+    build.add_argument("name", help="short name for the build; names out/<name>/")
+    build.add_argument("source", help="firmware URL or path to a local archive")
     build.add_argument(
-        "name", help="short name for the build; names out/<name>/")
+        "--type",
+        default="auto",
+        metavar="TYPE[:CUSTOM]",
+        help="ROM type, optionally TYPE:CUSTOMNAME (default: auto)",
+    )
     build.add_argument(
-        "source", help="firmware URL or path to a local archive")
+        "--add", default="", help="tag appended to the build's display name"
+    )
+    build.add_argument("--compress", action="store_true", help="also produce a .zip")
     build.add_argument(
-        "--type", default="auto", metavar="TYPE[:CUSTOM]",
-        help="ROM type, optionally TYPE:CUSTOMNAME (default: auto)")
-    build.add_argument(
-        "--add", default="", help="tag appended to the build's display name")
-    build.add_argument(
-        "--compress", action="store_true", help="also produce a .zip")
-    build.add_argument(
-        "--no-debloat", action="store_true",
-        help="keep the apps the ROM's patch set would remove")
+        "--no-debloat",
+        action="store_true",
+        help="keep the apps the ROM's patch set would remove",
+    )
     build.set_defaults(func=cmd_build)
 
     rebuild = sub.add_parser(
         "rebuild",
         help="rebuild a build's image from its (edited) tree in "
-             "tmp/<name>/images/system")
+        "tmp/<name>/images/system",
+    )
     rebuild.add_argument("name", help="name of an earlier build")
-    rebuild.add_argument(
-        "--compress", action="store_true", help="also produce a .zip")
+    rebuild.add_argument("--compress", action="store_true", help="also produce a .zip")
     for command in (build, rebuild):
         command.add_argument(
-            "--avb-key", type=avb_key_path, metavar="PEM",
-            help="RSA private key for AVB signing (default: AOSP test key)")
+            "--avb-key",
+            type=avb_key_path,
+            metavar="PEM",
+            help="RSA private key for AVB signing (default: AOSP test key)",
+        )
     rebuild.set_defaults(func=cmd_rebuild)
 
     lst = sub.add_parser("list", help=f"list builds recorded in {GSILIST}")
     lst.set_defaults(func=cmd_list)
 
-    clean = sub.add_parser(
-        "clean", help="remove everything under tmp/ and out/")
-    clean.add_argument(
-        "-y", "--yes", action="store_true", help="skip the confirmation")
+    clean = sub.add_parser("clean", help="remove everything under tmp/ and out/")
+    clean.add_argument("-y", "--yes", action="store_true", help="skip the confirmation")
     clean.set_defaults(func=cmd_clean)
 
     args = ap.parse_args()

@@ -8,6 +8,7 @@ import struct
 
 try:
     import zstandard
+
     HAS_ZSTD = True
 except ImportError:
     HAS_ZSTD = False
@@ -17,10 +18,10 @@ try:
 except ImportError:
     pb = None
 
-PAYLOAD_MAGIC = b'CrAU'
-ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
-BZ2_MAGIC = b'BZh'
-XZ_MAGIC = b'\xfd7zXZ\x00'
+PAYLOAD_MAGIC = b"CrAU"
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+BZ2_MAGIC = b"BZh"
+XZ_MAGIC = b"\xfd7zXZ\x00"
 
 # InstallOperation.Type values from update_metadata.proto.
 OP_REPLACE = 0
@@ -39,7 +40,7 @@ def is_payload(file_path: str) -> bool:
     if not os.path.isfile(file_path):
         return False
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             return f.read(4) == PAYLOAD_MAGIC
     except OSError:
         return False
@@ -47,8 +48,7 @@ def is_payload(file_path: str) -> bool:
 
 def _zstd_decompress(data: bytes) -> bytes:
     if not HAS_ZSTD:
-        raise PayloadError(
-            "zstandard package required for ZSTD payload extraction")
+        raise PayloadError("zstandard package required for ZSTD payload extraction")
     # Vendor streams may omit the content size, so decompress as a stream.
     return zstandard.ZstdDecompressor().decompressobj().decompress(data)
 
@@ -59,9 +59,11 @@ def _sniff_replace(data: bytes) -> bytes:
     REPLACE ops. Decode by magic, keeping the raw bytes if the magic turns
     out to be a coincidence.
     """
-    for magic, decompress in ((ZSTD_MAGIC, _zstd_decompress),
-                              (BZ2_MAGIC, bz2.decompress),
-                              (XZ_MAGIC, lzma.decompress)):
+    for magic, decompress in (
+        (ZSTD_MAGIC, _zstd_decompress),
+        (BZ2_MAGIC, bz2.decompress),
+        (XZ_MAGIC, lzma.decompress),
+    ):
         if data.startswith(magic):
             try:
                 return decompress(data)
@@ -81,23 +83,25 @@ DECODERS = {
 
 def _check_op(op, partition: str):
     # An op type this proto doesn't know parses as unset instead of failing.
-    if not op.HasField('type'):
+    if not op.HasField("type"):
         raise PayloadError(
             f"Unknown operation type in {partition}; payload.bin is newer "
-            "than this extractor supports")
+            "than this extractor supports"
+        )
     if op.src_extents or op.type not in FULL_OPS:
         op_name = pb.InstallOperation.Type.Name(op.type)
         raise PayloadError(
             f"{op_name} operation in {partition}: this is an "
             "incremental OTA, which needs the source build. "
-            "Use a full OTA package instead.")
+            "Use a full OTA package instead."
+        )
 
 
 def _extract_partition(f, part, out_path, data_offset, block_size):
     for op in part.operations:
         _check_op(op, part.partition_name)
 
-    with open(out_path, 'wb') as out_f:
+    with open(out_path, "wb") as out_f:
         end = 0
         for op in part.operations:
             for ext in op.dst_extents:
@@ -112,7 +116,7 @@ def _extract_partition(f, part, out_path, data_offset, block_size):
             for ext in op.dst_extents:
                 size = ext.num_blocks * block_size
                 out_f.seek(ext.start_block * block_size)
-                out_f.write(data[pos:pos + size].ljust(size, b'\x00'))
+                out_f.write(data[pos : pos + size].ljust(size, b"\x00"))
                 pos += size
 
         if part.new_partition_info.size > 0:
@@ -124,7 +128,7 @@ def extract_payload(
     payload_path: str,
     output_dir: str,
     target_partitions: Optional[Set[str]] = None,
-    logger=None
+    logger=None,
 ) -> List[str]:
     if not is_payload(payload_path):
         if logger:
@@ -136,16 +140,15 @@ def extract_payload(
 
     os.makedirs(output_dir, exist_ok=True)
     extracted: List[str] = []
-    targets = ({p.lower() for p in target_partitions}
-               if target_partitions else None)
+    targets = {p.lower() for p in target_partitions} if target_partitions else None
 
-    with open(payload_path, 'rb') as f:
+    with open(payload_path, "rb") as f:
         f.seek(len(PAYLOAD_MAGIC))
-        version = struct.unpack('>Q', f.read(8))[0]
-        manifest_size = struct.unpack('>Q', f.read(8))[0]
+        version = struct.unpack(">Q", f.read(8))[0]
+        manifest_size = struct.unpack(">Q", f.read(8))[0]
         metadata_sig_size = 0
         if version >= 2:
-            metadata_sig_size = struct.unpack('>I', f.read(4))[0]
+            metadata_sig_size = struct.unpack(">I", f.read(4))[0]
 
         manifest_raw = f.read(manifest_size)
         if len(manifest_raw) != manifest_size:
@@ -161,13 +164,20 @@ def extract_payload(
         # update_engine treats old_partition_info as the sole sign of a
         # delta. minor_version isn't one: partial updates, as in OnePlus
         # and OPPO full OTAs, set it while replacing whole partitions.
-        delta = next((p.partition_name for p in manifest.partitions
-                      if p.HasField('old_partition_info')), None)
+        delta = next(
+            (
+                p.partition_name
+                for p in manifest.partitions
+                if p.HasField("old_partition_info")
+            ),
+            None,
+        )
         if delta:
             raise PayloadError(
                 f"{delta} has source partition info: payload.bin is an "
                 "incremental OTA, which needs the source build. "
-                "Use a full OTA package instead.")
+                "Use a full OTA package instead."
+            )
         block_size = manifest.block_size
 
         for part in manifest.partitions:

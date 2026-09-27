@@ -12,13 +12,14 @@ from tools.image import build_system_image
 configure_environment()
 pytestmark = pytest.mark.skipif(
     not (find_tool("mke2fs") and find_tool("e2fsdroid")),
-    reason="needs mke2fs and e2fsdroid")
+    reason="needs mke2fs and e2fsdroid",
+)
 
 
 def _fs_config_entry(prefix, mode, uid, gid):
     raw = prefix.encode() + b"\0"
     raw += b"\0" * (-(16 + len(raw)) % 8)
-    return struct.pack('<HHHHQ', 16 + len(raw), mode, uid, gid, 0) + raw
+    return struct.pack("<HHHHQ", 16 + len(raw), mode, uid, gid, 0) + raw
 
 
 def test_image_gets_stock_owners_and_modes(tmp_path):
@@ -29,12 +30,20 @@ def test_image_gets_stock_owners_and_modes(tmp_path):
         os.chmod(src / path, 0o644)
     os.makedirs(src / "system/product/etc")
     (src / "system/product/etc/fs_config_files").write_bytes(
-        _fs_config_entry("product/bin/tool", 0o750, 1000, 1001))
+        _fs_config_entry("product/bin/tool", 0o750, 1000, 1001)
+    )
 
     image = tmp_path / "system.img"
-    assert build_system_image(str(src), str(image), 16 << 20,
-                              staging_dir=str(tmp_path / "st"),
-                              logger=lambda m: None) == 0
+    assert (
+        build_system_image(
+            str(src),
+            str(image),
+            16 << 20,
+            staging_dir=str(tmp_path / "st"),
+            logger=lambda m: None,
+        )
+        == 0
+    )
 
     with Ext4Filesystem(str(image)) as fs:
         sh = fs.stat("system/bin/sh")
@@ -52,7 +61,8 @@ def test_stock_labels_fill_only_the_rom_rules_gaps(tmp_path):
         "/lost\\+found u:object_r:rootfs:s0\n"
         "/cache u:object_r:cache_file:s0\n"
         "/system(/.*)? u:object_r:system_file:s0\n"
-        "/system/bin/sh u:object_r:shell_exec:s0\n")
+        "/system/bin/sh u:object_r:shell_exec:s0\n"
+    )
     for path in ("system/bin/sh", ".marker", "odd name (1).bin", "файл"):
         (src / path).write_bytes(b"x")
     stock = {
@@ -66,10 +76,17 @@ def test_stock_labels_fill_only_the_rom_rules_gaps(tmp_path):
     stock_path.write_text(json.dumps(stock))
 
     image = tmp_path / "system.img"
-    assert build_system_image(str(src), str(image), 16 << 20,
-                              staging_dir=str(tmp_path / "st"),
-                              stock_labels_path=str(stock_path),
-                              logger=lambda m: None) == 0
+    assert (
+        build_system_image(
+            str(src),
+            str(image),
+            16 << 20,
+            staging_dir=str(tmp_path / "st"),
+            stock_labels_path=str(stock_path),
+            logger=lambda m: None,
+        )
+        == 0
+    )
 
     labels = read_labels(str(image), "ext4")
     assert labels["/system/bin/sh"] == "u:object_r:shell_exec:s0"

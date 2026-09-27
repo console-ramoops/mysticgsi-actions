@@ -15,10 +15,7 @@ from .labels import read_labels
 
 
 def unpack_filesystem(
-    image_path: str,
-    output_dir: str,
-    fs_type: Optional[str] = None,
-    logger=None
+    image_path: str, output_dir: str, fs_type: Optional[str] = None, logger=None
 ) -> int:
     """
     Unpacks an ext4, erofs or f2fs image into output_dir (replacing it).
@@ -42,8 +39,7 @@ def unpack_filesystem(
         log(f"Unsupported or unidentified filesystem: {image_path}")
         return -1
 
-    if (not success or not os.path.isdir(output_dir)
-            or not os.listdir(output_dir)):
+    if not success or not os.path.isdir(output_dir) or not os.listdir(output_dir):
         log(f"Unpacking failed or produced empty directory: {image_path}")
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir, ignore_errors=True)

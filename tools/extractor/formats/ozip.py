@@ -6,15 +6,17 @@ import os
 
 try:
     from Crypto.Cipher import AES
+
     HAS_AES = True
 except ImportError:
     try:
         from Cryptodome.Cipher import AES
+
         HAS_AES = True
     except ImportError:
         HAS_AES = False
 
-OZIP_MAGIC = b'OPPOENCRYPT!'
+OZIP_MAGIC = b"OPPOENCRYPT!"
 
 KNOWN_KEYS = [
     "D6EECF0AE5ACD4E0E9FE522DE7CE381E",  # mnkey
@@ -59,7 +61,7 @@ def is_ozip(file_path: str) -> bool:
     if not os.path.isfile(file_path):
         return False
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             return f.read(12) == OZIP_MAGIC
     except OSError:
         return False
@@ -70,13 +72,12 @@ def _find_key(test_data: bytes) -> Optional[bytes]:
         key_bytes = binascii.unhexlify(key_hex)
         cipher = AES.new(key_bytes, AES.MODE_ECB)
         decrypted = cipher.decrypt(test_data[:16])
-        if decrypted[:4] in (b'PK\x03\x04', b'AVB0', b'ANDR'):
+        if decrypted[:4] in (b"PK\x03\x04", b"AVB0", b"ANDR"):
             return key_bytes
     return None
 
 
-def decrypt_ozip(ozip_path: str, output_zip_path: str,
-                 logger=None) -> bool:
+def decrypt_ozip(ozip_path: str, output_zip_path: str, logger=None) -> bool:
     if not HAS_AES:
         raise RuntimeError("pycryptodome is required for OZIP decryption")
 
@@ -87,7 +88,7 @@ def decrypt_ozip(ozip_path: str, output_zip_path: str,
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    with open(ozip_path, 'rb') as in_f:
+    with open(ozip_path, "rb") as in_f:
         # Mode 1 encrypts from 0x1050; mode 2 has per-block headers at 0x50.
         in_f.seek(0x1050)
         test_block = in_f.read(16)
@@ -107,8 +108,8 @@ def decrypt_ozip(ozip_path: str, output_zip_path: str,
 
 
 def _read_size_field(in_f) -> str:
-    raw = in_f.read(16).replace(b'\x00', b'')
-    return raw.decode('ascii', errors='ignore').strip()
+    raw = in_f.read(16).replace(b"\x00", b"")
+    return raw.decode("ascii", errors="ignore").strip()
 
 
 def _decrypt_mode1(in_f, output_path: str, key: bytes, logger=None) -> bool:
@@ -122,7 +123,7 @@ def _decrypt_mode1(in_f, output_path: str, key: bytes, logger=None) -> bool:
     in_f.seek(0x1050)
     cipher = AES.new(key, AES.MODE_ECB)
 
-    with open(output_path, 'wb') as out_f:
+    with open(output_path, "wb") as out_f:
         remaining = dsize
         while remaining > 0:
             chunk_size = min(remaining, 0x4000)
@@ -131,7 +132,7 @@ def _decrypt_mode1(in_f, output_path: str, key: bytes, logger=None) -> bool:
                 break
             pad_len = (16 - (len(data) % 16)) % 16
             if pad_len > 0:
-                data += b'\x00' * pad_len
+                data += b"\x00" * pad_len
             dec = cipher.decrypt(data)
             out_f.write(dec[:chunk_size])
             remaining -= chunk_size
@@ -147,7 +148,7 @@ def _decrypt_mode2(in_f, output_path: str, key: bytes, logger=None) -> bool:
     cipher = AES.new(key, AES.MODE_ECB)
     bstart = 0
 
-    with open(output_path, 'wb') as out_f:
+    with open(output_path, "wb") as out_f:
         while bstart < total_size:
             in_f.seek(bstart)
             hdr = in_f.read(12)

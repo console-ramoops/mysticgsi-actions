@@ -9,12 +9,12 @@ def detect_filesystem(file_path: str) -> str:
     Returns: 'ext4', 'erofs', 'f2fs', or 'unknown'
     """
     formats = (
-        (b'\xe2\xe1\xf5\xe0', "erofs", 1024),
-        (b'\x53\xef', "ext4", 1080),
-        (b'\x10\x20\xf5\xf2', "f2fs", 1024),
+        (b"\xe2\xe1\xf5\xe0", "erofs", 1024),
+        (b"\x53\xef", "ext4", 1080),
+        (b"\x10\x20\xf5\xf2", "f2fs", 1024),
     )
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             for header, desc, offset in formats:
                 f.seek(offset)
                 if f.read(len(header)) == header:
@@ -22,4 +22,4 @@ def detect_filesystem(file_path: str) -> str:
     except OSError:
         pass
 
-    return 'unknown'
+    return "unknown"

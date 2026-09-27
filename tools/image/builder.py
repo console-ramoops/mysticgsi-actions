@@ -13,8 +13,7 @@ from ..host import configure_environment, find_tool
 from .contexts import prepare_file_contexts
 
 DEFAULT_TIMESTAMP = "1230768000"
-MKE2FS_CONFIG = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "mke2fs.conf")
+MKE2FS_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mke2fs.conf")
 STUB_DIRS = ("persist", "bt_firmware", "firmware", "dsp", "cache")
 FS_CONFIG_FILES = ("fs_config_files", "fs_config_dirs")
 # Partitions merged into the GSI's system tree whose own fs_config tables
@@ -62,8 +61,10 @@ def _fs_config_root(source_dir: str, staging_dir: str) -> str:
 def _run_step(name, cmd, env, output_image, log) -> int:
     res = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if res.returncode != 0:
-        log(f"{name} failed with exit code {res.returncode}:\n"
-            f"{res.stdout}\n{res.stderr}")
+        log(
+            f"{name} failed with exit code {res.returncode}:\n"
+            f"{res.stdout}\n{res.stderr}"
+        )
         try:
             os.remove(output_image)
         except OSError:
@@ -78,7 +79,7 @@ def build_system_image(
     staging_dir: Optional[str] = None,
     file_contexts_path: Optional[str] = None,
     stock_labels_path: Optional[str] = None,
-    logger=None
+    logger=None,
 ) -> int:
     """
     Builds an ext4 image of system_size bytes from source_dir. SELinux
@@ -109,11 +110,11 @@ def build_system_image(
     if not file_contexts_path:
         stock_labels = None
         if stock_labels_path and os.path.isfile(stock_labels_path):
-            with open(stock_labels_path, encoding='utf-8') as f:
+            with open(stock_labels_path, encoding="utf-8") as f:
                 stock_labels = json.load(f)
         file_contexts_path = prepare_file_contexts(
-            source_dir, os.path.join(work_dir, "file_contexts"),
-            stock_labels)
+            source_dir, os.path.join(work_dir, "file_contexts"), stock_labels
+        )
 
     blocks = system_size // BLOCK_SIZE
     if blocks <= 0:
@@ -132,13 +133,20 @@ def build_system_image(
     log(f"Formatting ext4 filesystem ({blocks} blocks of {BLOCK_SIZE} bytes)")
     mke2fs_cmd = [
         mke2fs_bin,
-        "-O", "^has_journal",
-        "-L", "/",
-        "-I", "256",
-        "-M", "/",
-        "-m", "0",
-        "-t", "ext4",
-        "-b", str(BLOCK_SIZE),
+        "-O",
+        "^has_journal",
+        "-L",
+        "/",
+        "-I",
+        "256",
+        "-M",
+        "/",
+        "-m",
+        "0",
+        "-t",
+        "ext4",
+        "-b",
+        str(BLOCK_SIZE),
         output_image,
         str(blocks),
     ]
@@ -150,8 +158,14 @@ def build_system_image(
     log("Populating filesystem with e2fsdroid")
     # -p adds the ROM's own fs_config tables (vendor uids, modes and
     # capabilities) on top of the AOSP defaults e2fsdroid applies anyway.
-    e2fsdroid_cmd = [e2fsdroid_bin, "-e", "-T", DEFAULT_TIMESTAMP,
-                     "-p", _fs_config_root(source_dir, work_dir)]
+    e2fsdroid_cmd = [
+        e2fsdroid_bin,
+        "-e",
+        "-T",
+        DEFAULT_TIMESTAMP,
+        "-p",
+        _fs_config_root(source_dir, work_dir),
+    ]
     if file_contexts_path and os.path.isfile(file_contexts_path):
         e2fsdroid_cmd += ["-S", file_contexts_path]
     e2fsdroid_cmd += ["-f", source_dir, "-a", "/", output_image]

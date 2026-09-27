@@ -11,40 +11,40 @@ import struct
 # Masks follow LLVM's AArch64InstrFormats.td. Keep SIMD and scalar forms
 # separate: their identical mnemonics can have different CPU requirements.
 INSTRUCTION_PATTERNS = {
-    "SVE/SVE2": ((0x1e000000, 0x04000000),),
+    "SVE/SVE2": ((0x1E000000, 0x04000000),),
     "SME": (
-        (0xffffffff, 0xd503437f),  # SMSTART SM
-        (0xffffffff, 0xd503457f),  # SMSTART ZA
-        (0xffffffff, 0xd503477f),  # SMSTART
-        (0xffffff00, 0xc0080000),  # ZERO ZA
+        (0xFFFFFFFF, 0xD503437F),  # SMSTART SM
+        (0xFFFFFFFF, 0xD503457F),  # SMSTART ZA
+        (0xFFFFFFFF, 0xD503477F),  # SMSTART
+        (0xFFFFFF00, 0xC0080000),  # ZERO ZA
     ),
     "BF16": (
-        (0xbfe0fc00, 0x2e40fc00),  # BFDOT
-        (0xffe0fc00, 0x6e40ec00),  # BFMMLA
-        (0xbfe0fc00, 0x2ec0fc00),  # BFMLALB/T
-        (0xfffffc00, 0x1e634000),  # BFCVT
-        (0xbffffc00, 0x0ea16800),  # BFCVTN/2
-        (0xbfc0f400, 0x0f40f000),  # Indexed BFDOT
-        (0xbfc0f400, 0x0fc0f000),  # Indexed BFMLALB/T
+        (0xBFE0FC00, 0x2E40FC00),  # BFDOT
+        (0xFFE0FC00, 0x6E40EC00),  # BFMMLA
+        (0xBFE0FC00, 0x2EC0FC00),  # BFMLALB/T
+        (0xFFFFFC00, 0x1E634000),  # BFCVT
+        (0xBFFFFC00, 0x0EA16800),  # BFCVTN/2
+        (0xBFC0F400, 0x0F40F000),  # Indexed BFDOT
+        (0xBFC0F400, 0x0FC0F000),  # Indexed BFMLALB/T
     ),
     "I8MM": (
-        (0xffe0fc00, 0x4e80a400),  # SMMLA
-        (0xffe0fc00, 0x6e80a400),  # UMMLA
-        (0xffe0fc00, 0x4e80ac00),  # USMMLA
-        (0xbfe0fc00, 0x0e809c00),  # USDOT
-        (0xbfc0f400, 0x0f80f000),  # Indexed USDOT
-        (0xbfc0f400, 0x0f00f000),  # Indexed SUDOT
+        (0xFFE0FC00, 0x4E80A400),  # SMMLA
+        (0xFFE0FC00, 0x6E80A400),  # UMMLA
+        (0xFFE0FC00, 0x4E80AC00),  # USMMLA
+        (0xBFE0FC00, 0x0E809C00),  # USDOT
+        (0xBFC0F400, 0x0F80F000),  # Indexed USDOT
+        (0xBFC0F400, 0x0F00F000),  # Indexed SUDOT
     ),
     "MOPS": (
-        (0xfb200c00, 0x19000400),  # CPYF/CPY P/M/E, option variants
-        (0xfbe00800, 0x19c00000),  # SET/SETG P/M/E, option variants
+        (0xFB200C00, 0x19000400),  # CPYF/CPY P/M/E, option variants
+        (0xFBE00800, 0x19C00000),  # SET/SETG P/M/E, option variants
     ),
     "CSSC": (
-        (0x7ffffc00, 0x5ac01800),  # Scalar CTZ
-        (0x7ffffc00, 0x5ac01c00),  # Scalar CNT
-        (0x7ffffc00, 0x5ac02000),  # Scalar ABS
-        (0x7fe0f000, 0x1ac06000),  # Scalar min/max, register
-        (0x7ff00000, 0x11c00000),  # Scalar min/max, immediate
+        (0x7FFFFC00, 0x5AC01800),  # Scalar CTZ
+        (0x7FFFFC00, 0x5AC01C00),  # Scalar CNT
+        (0x7FFFFC00, 0x5AC02000),  # Scalar ABS
+        (0x7FE0F000, 0x1AC06000),  # Scalar min/max, register
+        (0x7FF00000, 0x11C00000),  # Scalar min/max, immediate
     ),
 }
 
@@ -55,9 +55,11 @@ def find_cpu_features(path):
         with open(path, "rb") as file:
             size = os.fstat(file.fileno()).st_size
             header = file.read(64)
-            if (header[:6] != b"\x7fELF\x02\x01"
-                    or len(header) < 20
-                    or struct.unpack_from("<H", header, 18)[0] != 183):
+            if (
+                header[:6] != b"\x7fELF\x02\x01"
+                or len(header) < 20
+                or struct.unpack_from("<H", header, 18)[0] != 183
+            ):
                 return set()
             if len(header) != 64:
                 return None
@@ -65,10 +67,12 @@ def find_cpu_features(path):
             program_offset = struct.unpack_from("<Q", header, 32)[0]
             program_size = struct.unpack_from("<H", header, 54)[0]
             program_count = struct.unpack_from("<H", header, 56)[0]
-            if (program_size < 56 or program_offset > size
-                    or program_count == 0xffff
-                    or program_count > (size - program_offset)
-                    // program_size):
+            if (
+                program_size < 56
+                or program_offset > size
+                or program_count == 0xFFFF
+                or program_count > (size - program_offset) // program_size
+            ):
                 return None
 
             segments = []
@@ -100,8 +104,8 @@ def find_cpu_features(path):
                     for (word,) in struct.iter_unpack("<I", chunk):
                         for feature, patterns in INSTRUCTION_PATTERNS.items():
                             if feature not in features and any(
-                                    word & mask == value
-                                    for mask, value in patterns):
+                                word & mask == value for mask, value in patterns
+                            ):
                                 features.add(feature)
                     remaining -= len(chunk)
             return features

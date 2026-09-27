@@ -32,9 +32,9 @@ def find_erofs_tool() -> Optional[Tuple[str, str]] | None:
 
 def _extracted(cmd, output_dir: str) -> bool:
     rc = subprocess.run(
-        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-    return (rc == 0 and os.path.isdir(output_dir)
-            and bool(os.listdir(output_dir)))
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    ).returncode
+    return rc == 0 and os.path.isdir(output_dir) and bool(os.listdir(output_dir))
 
 
 def extract_erofs(image_path: str, output_dir: str, logger=None) -> bool:
@@ -44,11 +44,13 @@ def extract_erofs(image_path: str, output_dir: str, logger=None) -> bool:
     tool = find_erofs_tool()
     if tool is None:
         if logger:
-            logger("No EROFS extraction tool found. "
-                   "Please install erofs-utils:\n"
-                   "  macOS: brew install erofs-utils\n"
-                   "  Linux: sudo apt install erofs-utils "
-                   "(or dnf/pacman install erofs-utils)")
+            logger(
+                "No EROFS extraction tool found. "
+                "Please install erofs-utils:\n"
+                "  macOS: brew install erofs-utils\n"
+                "  Linux: sudo apt install erofs-utils "
+                "(or dnf/pacman install erofs-utils)"
+            )
         return False
 
     tool_path, tool_name = tool
@@ -59,11 +61,13 @@ def extract_erofs(image_path: str, output_dir: str, logger=None) -> bool:
     if tool_name == "fsck.erofs":
         # Names differing only in case collide on case-insensitive hosts
         # (macOS by default); like the ext4 extractor, let the last one win.
-        return _extracted([tool_path, f"--extract={out}", "--overwrite",
-                           image], output_dir)
+        return _extracted(
+            [tool_path, f"--extract={out}", "--overwrite", image], output_dir
+        )
 
     # extract.erofs writes into <out>/<image name>, so aim it at the parent
     # first; some builds write straight into -o instead.
     cmd = [tool_path, "-x", "-i", image, "-o"]
-    return (_extracted(cmd + [os.path.dirname(out)], output_dir)
-            or _extracted(cmd + [out], output_dir))
+    return _extracted(cmd + [os.path.dirname(out)], output_dir) or _extracted(
+        cmd + [out], output_dir
+    )

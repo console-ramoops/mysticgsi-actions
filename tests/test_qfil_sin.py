@@ -7,10 +7,12 @@ BLK = 4096
 
 
 def _sparse_raw(data):
-    header = struct.pack('<I4H4I', sparse.SPARSE_HEADER_MAGIC, 1, 0, 28, 12,
-                         BLK, len(data) // BLK, 1, 0)
-    chunk = struct.pack('<2H2I', sparse.CHUNK_TYPE_RAW, 0, len(data) // BLK,
-                        12 + len(data))
+    header = struct.pack(
+        "<I4H4I", sparse.SPARSE_HEADER_MAGIC, 1, 0, 28, 12, BLK, len(data) // BLK, 1, 0
+    )
+    chunk = struct.pack(
+        "<2H2I", sparse.CHUNK_TYPE_RAW, 0, len(data) // BLK, 12 + len(data)
+    )
     return header + chunk + data
 
 
@@ -28,17 +30,17 @@ def test_qfil_places_split_pieces_by_start_sector(tmp_path):
                filename="vendor_b.img" start_sector="3000"/>
     </data>""")
 
-    extracted = qfil.process_qfil(str(tmp_path), str(tmp_path),
-                                  target_partitions={"system", "vendor"})
+    extracted = qfil.process_qfil(
+        str(tmp_path), str(tmp_path), target_partitions={"system", "vendor"}
+    )
 
     assert extracted == [str(tmp_path / "system.img")]
-    assert (tmp_path / "system.img").read_bytes() == \
-        piece0 + bytes(2 * BLK) + piece1
+    assert (tmp_path / "system.img").read_bytes() == piece0 + bytes(2 * BLK) + piece1
     assert not (tmp_path / "system_2.img").exists()
 
 
 def _ext4_like(size):
-    superblock = struct.pack('<II16xI', 16, 64, 2).ljust(0x38, b'\0')
+    superblock = struct.pack("<II16xI", 16, 64, 2).ljust(0x38, b"\0")
     superblock += sin.EXT4_MAGIC
     image = bytes(1024) + superblock
     return image + os.urandom(size - len(image))

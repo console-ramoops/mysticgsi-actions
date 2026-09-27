@@ -8,8 +8,7 @@ import shutil
 import subprocess
 import sys
 
-REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Android builds of e2fsprogs install mke2fs as mke2fs.android; prefer it
 # over a plain host mke2fs, which lacks the Android extensions.
@@ -73,5 +72,5 @@ def check_environment() -> None:
         return
 
     raise RuntimeError(
-        f"Missing native image tools: {', '.join(missing)}. "
-        "Run ./setup_host.py first.")
+        f"Missing native image tools: {', '.join(missing)}. Run ./setup_host.py first."
+    )

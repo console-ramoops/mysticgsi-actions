@@ -24,8 +24,7 @@
             pycryptodome     # OZIP decryption
             py7zr
             pytest
-            flake8
-            pep8-naming
+            ruff
           ]);
 
           # External commands the pipeline invokes by name.

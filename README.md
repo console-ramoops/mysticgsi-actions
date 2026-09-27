@@ -14,7 +14,7 @@ On macOS, install Homebrew and Xcode Command Line Tools first.
 
 ```sh
 git clone https://github.com/MysticGSI/mysticgsi.git && cd mysticgsi
-./setup_host.py     # --dev also installs pytest and flake8
+./setup_host.py     # --dev also installs pytest and Ruff
 ```
 
 The script installs the system packages, creates `.venv` and makes sure
@@ -196,7 +196,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ```sh
 .venv/bin/python -m pytest tests -q
-.venv/bin/python -m flake8
+.venv/bin/ruff check .
 ```
 
 Patch files of 50 MiB or more are stored xz-compressed (`<name>.xz`) and unpacked

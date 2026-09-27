@@ -45,8 +45,7 @@ def disk_usage(path):
             except OSError:
                 continue
             # Hard links share an inode; count it once, like du does.
-            if st.st_nlink > 1 and not os.path.isdir(
-                    os.path.join(root, name)):
+            if st.st_nlink > 1 and not os.path.isdir(os.path.join(root, name)):
                 if (st.st_dev, st.st_ino) in seen:
                     continue
                 seen.add((st.st_dev, st.st_ino))
@@ -177,8 +176,12 @@ def cp_r(src, dst, *, clobber=True):
             continue
         target = _target(s, dst)
         if not clobber and os.path.lexists(target):
-            if (os.path.isdir(s) and not os.path.islink(s)
-                    and os.path.isdir(target) and not os.path.islink(target)):
+            if (
+                os.path.isdir(s)
+                and not os.path.islink(s)
+                and os.path.isdir(target)
+                and not os.path.islink(target)
+            ):
                 for name in os.listdir(s):
                     cp_r(os.path.join(s, name), target, clobber=False)
             continue

@@ -134,11 +134,11 @@ CONTEXT_FILES = (
 
 def _read_contexts(path: str) -> List[str]:
     try:
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
             lines = [line.strip() for line in f]
     except OSError:
         return []
-    return [line for line in lines if line and not line.startswith('#')]
+    return [line for line in lines if line and not line.startswith("#")]
 
 
 def _covered_by(contexts: List[str]) -> Callable[[str], bool]:
@@ -157,7 +157,8 @@ def _covered_by(contexts: List[str]) -> Callable[[str], bool]:
 
 
 _LITERAL_BYTES = frozenset(
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/_-")
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/_-"
+)
 
 
 def _literal_spec(path: str) -> str:
@@ -179,23 +180,28 @@ def _literal_spec(path: str) -> str:
     return "".join(out)
 
 
-def _stock_label_gaps(system_dir: str, contexts: List[str],
-                      stock_labels: Dict[str, str]) -> List[str]:
+def _stock_label_gaps(
+    system_dir: str, contexts: List[str], stock_labels: Dict[str, str]
+) -> List[str]:
     """
     Exact rules giving the paths in system_dir that no ROM rule covers the
     label their partition image had. Paths the ROM's rules (and the patches
     applied to them) do cover keep getting labelled by those rules.
     """
     covered = _covered_by(contexts)
-    return [f"{_literal_spec(path)} {label}"
-            for path, label in sorted(stock_labels.items())
-            if label and not any(c.isspace() for c in label)
-            and os.path.lexists(system_dir + path) and not covered(path)]
+    return [
+        f"{_literal_spec(path)} {label}"
+        for path, label in sorted(stock_labels.items())
+        if label
+        and not any(c.isspace() for c in label)
+        and os.path.lexists(system_dir + path)
+        and not covered(path)
+    ]
 
 
-def prepare_file_contexts(system_dir: str, output_file: str,
-                          stock_labels: Optional[Dict[str, str]] = None
-                          ) -> Optional[str]:
+def prepare_file_contexts(
+    system_dir: str, output_file: str, stock_labels: Optional[Dict[str, str]] = None
+) -> Optional[str]:
     """
     Writes the ROM's own file_contexts, exact rules for the paths they miss
     from stock_labels (image path -> label), and EXTRA_FILE_CONTEXTS as a
@@ -216,7 +222,7 @@ def prepare_file_contexts(system_dir: str, output_file: str,
     out_dir = os.path.dirname(output_file)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.writelines(f"{ctx}\n" for ctx in contexts)
 
     return output_file

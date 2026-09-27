@@ -17,9 +17,9 @@ CP_UMOUNT_FLAG = 0x01
 SUMMARY_JOURNAL_OFFSET = 3584
 SUMMARY_JOURNAL_SIZE = 507
 F2FS_MAGIC = 0xF2F52010
-COMPRESS_ADDR = 0xfffffffe
+COMPRESS_ADDR = 0xFFFFFFFE
 COMPRESS_HEADER_SIZE = 24
-XATTR_MAGIC = 0xf2f52011
+XATTR_MAGIC = 0xF2F52011
 XATTR_SECURITY_INDEX = 6
 XATTR_HEADER_SIZE = 24
 
@@ -29,15 +29,15 @@ class F2FSError(Exception):
 
 
 def _u16(data, offset):
-    return struct.unpack_from('<H', data, offset)[0]
+    return struct.unpack_from("<H", data, offset)[0]
 
 
 def _u32(data, offset):
-    return struct.unpack_from('<I', data, offset)[0]
+    return struct.unpack_from("<I", data, offset)[0]
 
 
 def _u64(data, offset):
-    return struct.unpack_from('<Q', data, offset)[0]
+    return struct.unpack_from("<Q", data, offset)[0]
 
 
 def _crc32(data):
@@ -45,13 +45,13 @@ def _crc32(data):
     for byte in data:
         crc ^= byte
         for _ in range(8):
-            crc = (crc >> 1) ^ (0xedb88320 if crc & 1 else 0)
+            crc = (crc >> 1) ^ (0xEDB88320 if crc & 1 else 0)
     return crc
 
 
 class F2FSFilesystem:
     def __init__(self, path):
-        self._file = open(path, 'rb')
+        self._file = open(path, "rb")
         self._size = os.fstat(self._file.fileno()).st_size
         try:
             self._load_superblock()
@@ -105,11 +105,17 @@ class F2FSFilesystem:
         self.nat_segments = _u32(sb, 60)
         self.cp_payload = _u32(sb, 1664)
         self.flexible_inline_xattr = bool(_u32(sb, 2180) & 0x40)
-        if (self.block_count * BLOCK_SIZE > self._size
-                or not 0 < self.cp_block < self.nat_block
-                < self.main_block < self.block_count
-                or not self.root_ino or self.nat_segments < 2
-                or self.nat_segments % 2):
+        if (
+            self.block_count * BLOCK_SIZE > self._size
+            or not 0
+            < self.cp_block
+            < self.nat_block
+            < self.main_block
+            < self.block_count
+            or not self.root_ino
+            or self.nat_segments < 2
+            or self.nat_segments % 2
+        ):
             raise F2FSError("invalid F2FS geometry")
 
     def _checkpoint(self, start):
@@ -118,22 +124,24 @@ class F2FSFilesystem:
         if not 2 <= total <= self.blocks_per_seg:
             return None
         last = self._block(start + total - 1)
-        if (not self._valid_checkpoint_block(first)
-                or not self._valid_checkpoint_block(last)
-                or _u64(first, 0) != _u64(last, 0)):
+        if (
+            not self._valid_checkpoint_block(first)
+            or not self._valid_checkpoint_block(last)
+            or _u64(first, 0) != _u64(last, 0)
+        ):
             return None
         return first
 
     @staticmethod
     def _valid_checkpoint_block(block):
         offset = _u32(block, 164)
-        return (192 <= offset <= BLOCK_SIZE - 4
-                and _crc32(block[:offset]) == _u32(block, offset))
+        return 192 <= offset <= BLOCK_SIZE - 4 and _crc32(block[:offset]) == _u32(
+            block, offset
+        )
 
     def _load_checkpoint(self):
         candidates = []
-        for start in (self.cp_block,
-                      self.cp_block + self.blocks_per_seg):
+        for start in (self.cp_block, self.cp_block + self.blocks_per_seg):
             cp = self._checkpoint(start)
             if cp is not None:
                 candidates.append((_u64(cp, 0), start, cp))
@@ -145,13 +153,15 @@ class F2FSFilesystem:
         self.cp_sum_start = _u32(cp, 140)
         sit_size = _u32(cp, 156)
         nat_size = _u32(cp, 160)
-        if (self.cp_payload + 2 > self.cp_total
-                or 192 + sit_size + nat_size
-                > (self.cp_payload + 1) * BLOCK_SIZE):
+        if (
+            self.cp_payload + 2 > self.cp_total
+            or 192 + sit_size + nat_size > (self.cp_payload + 1) * BLOCK_SIZE
+        ):
             raise F2FSError("invalid checkpoint bitmap sizes")
-        payload = b''.join(self._block(self.cp_start + offset)
-                           for offset in range(self.cp_payload + 1))
-        self.nat_bitmap = payload[192 + sit_size:192 + sit_size + nat_size]
+        payload = b"".join(
+            self._block(self.cp_start + offset) for offset in range(self.cp_payload + 1)
+        )
+        self.nat_bitmap = payload[192 + sit_size : 192 + sit_size + nat_size]
         nat_blocks = self.nat_segments // 2 * self.blocks_per_seg
         if len(self.nat_bitmap) * 8 < nat_blocks:
             raise F2FSError("incomplete NAT bitmap")
@@ -188,8 +198,7 @@ class F2FSFilesystem:
             segment, offset = divmod(block_index, self.blocks_per_seg)
             address = self.nat_block + segment * 2 * self.blocks_per_seg
             address += offset
-            if self.nat_bitmap[block_index // 8] & (
-                    0x80 >> (block_index % 8)):
+            if self.nat_bitmap[block_index // 8] & (0x80 >> (block_index % 8)):
                 address += self.blocks_per_seg
             address = _u32(self._block(address), entry * 9 + 5)
         node = self._data_block(address)
@@ -207,8 +216,7 @@ class F2FSFilesystem:
         extra = extra_size // 4
         inline_xattr = 0
         if node[3] & 0x01:
-            inline_xattr = (_u16(node, 362) if self.flexible_inline_xattr
-                            else 50)
+            inline_xattr = _u16(node, 362) if self.flexible_inline_xattr else 50
         count = INODE_ADDRS - extra - inline_xattr
         if extra > 256 or count < 0:
             raise F2FSError(f"inode {nid} has invalid extra attributes")
@@ -225,48 +233,56 @@ class F2FSFilesystem:
         if not inline_size and not xattr_nid:
             return None
         start = INODE_ADDR_OFFSET + (INODE_ADDRS - inline_size // 4) * 4
-        data = node[start:start + inline_size]
+        data = node[start : start + inline_size]
         if xattr_nid:
             xattr_node = self._node(xattr_nid)
             if _u32(xattr_node, NODE_FOOTER_OFFSET + 4) != (
-                    _u32(node, NODE_FOOTER_OFFSET)):
+                _u32(node, NODE_FOOTER_OFFSET)
+            ):
                 raise F2FSError("xattr node has the wrong owner")
             data += xattr_node[:NODE_FOOTER_OFFSET]
-        if len(data) < XATTR_HEADER_SIZE or data[:4] == b'\0' * 4:
+        if len(data) < XATTR_HEADER_SIZE or data[:4] == b"\0" * 4:
             return None
         if _u32(data, 0) != XATTR_MAGIC:
             raise F2FSError("invalid F2FS xattr header")
         pos = XATTR_HEADER_SIZE
         while pos + 4 <= len(data):
-            index, name_len, value_len = struct.unpack_from(
-                '<BBH', data, pos)
+            index, name_len, value_len = struct.unpack_from("<BBH", data, pos)
             if not index and not name_len and not value_len:
                 return None
             end = pos + 4 + name_len + value_len
             if end > len(data):
                 raise F2FSError("truncated F2FS xattr entry")
-            if (index == XATTR_SECURITY_INDEX
-                    and data[pos + 4:pos + 4 + name_len] == b'selinux'):
-                return data[pos + 4 + name_len:end].rstrip(b'\0')
+            if (
+                index == XATTR_SECURITY_INDEX
+                and data[pos + 4 : pos + 4 + name_len] == b"selinux"
+            ):
+                return data[pos + 4 + name_len : end].rstrip(b"\0")
             pos = (end + 3) & ~3
         raise F2FSError("missing F2FS xattr terminator")
 
     def _direct_addresses(self, nid, cluster_size):
         count = ADDRS_PER_BLOCK - ADDRS_PER_BLOCK % cluster_size
         if nid:
-            yield from struct.unpack_from(f'<{count}I', self._node(nid))
+            yield from struct.unpack_from(f"<{count}I", self._node(nid))
         else:
             yield from (0 for _ in range(count))
 
     def _indirect_addresses(self, nid, cluster_size):
-        nids = (struct.unpack_from('<1018I', self._node(nid)) if nid
-                else (0,) * ADDRS_PER_BLOCK)
+        nids = (
+            struct.unpack_from("<1018I", self._node(nid))
+            if nid
+            else (0,) * ADDRS_PER_BLOCK
+        )
         for child in nids:
             yield from self._direct_addresses(child, cluster_size)
 
     def _double_indirect_addresses(self, nid, cluster_size):
-        nids = (struct.unpack_from('<1018I', self._node(nid)) if nid
-                else (0,) * ADDRS_PER_BLOCK)
+        nids = (
+            struct.unpack_from("<1018I", self._node(nid))
+            if nid
+            else (0,) * ADDRS_PER_BLOCK
+        )
         for child in nids:
             yield from self._indirect_addresses(child, cluster_size)
 
@@ -274,7 +290,7 @@ class F2FSFilesystem:
         count -= count % cluster_size
         for index in range(count):
             yield _u32(node, INODE_ADDR_OFFSET + (extra + index) * 4)
-        nids = struct.unpack_from('<5I', node, INODE_NID_OFFSET)
+        nids = struct.unpack_from("<5I", node, INODE_NID_OFFSET)
         for nid in nids[:2]:
             yield from self._direct_addresses(nid, cluster_size)
         for nid in nids[2:4]:
@@ -284,8 +300,9 @@ class F2FSFilesystem:
     def _file_blocks(self, node, extra, count):
         size = _u64(node, 16)
         needed = (size + BLOCK_SIZE - 1) // BLOCK_SIZE
-        capacity = (count + 2 * ADDRS_PER_BLOCK
-                    + 2 * ADDRS_PER_BLOCK ** 2 + ADDRS_PER_BLOCK ** 3)
+        capacity = (
+            count + 2 * ADDRS_PER_BLOCK + 2 * ADDRS_PER_BLOCK**2 + ADDRS_PER_BLOCK**3
+        )
         if needed > capacity:
             raise F2FSError("file exceeds F2FS address capacity")
         addresses = self._addresses(node, extra, count)
@@ -293,13 +310,13 @@ class F2FSFilesystem:
             address = next(addresses)
             if address == COMPRESS_ADDR:
                 raise F2FSError("compression marker in a plain file")
-            yield None if address in (0, 0xffffffff) else address
+            yield None if address in (0, 0xFFFFFFFF) else address
 
     def _compressed_cluster(self, addresses, algorithm, flags):
         seen_gap = False
         blocks = []
         for address in addresses[1:]:
-            if address in (0, 0xffffffff):
+            if address in (0, 0xFFFFFFFF):
                 seen_gap = True
             elif address == COMPRESS_ADDR or seen_gap:
                 raise F2FSError("invalid compressed cluster addresses")
@@ -307,33 +324,32 @@ class F2FSFilesystem:
                 blocks.append(self._data_block(address))
         if not blocks:
             raise F2FSError("compressed cluster has no data")
-        packed = b''.join(blocks)
+        packed = b"".join(blocks)
         length = _u32(packed, 0)
         if not 0 < length <= len(packed) - COMPRESS_HEADER_SIZE:
             raise F2FSError("invalid compressed cluster length")
-        payload = packed[COMPRESS_HEADER_SIZE:COMPRESS_HEADER_SIZE + length]
+        payload = packed[COMPRESS_HEADER_SIZE : COMPRESS_HEADER_SIZE + length]
         if flags & 1 and _crc32(payload) != _u32(packed, 4):
             raise F2FSError("compressed cluster checksum mismatch")
         expected = len(addresses) * BLOCK_SIZE
         if algorithm == 1:
             import lz4.block
+
             try:
-                data = lz4.block.decompress(
-                    payload, uncompressed_size=expected)
+                data = lz4.block.decompress(payload, uncompressed_size=expected)
             except lz4.block.LZ4BlockError as error:
-                raise F2FSError(
-                    f"compressed cluster is invalid: {error}") from error
+                raise F2FSError(f"compressed cluster is invalid: {error}") from error
         elif algorithm == 2:
             import zstandard
+
             try:
                 data = zstandard.ZstdDecompressor().decompress(
-                    payload, max_output_size=expected)
+                    payload, max_output_size=expected
+                )
             except zstandard.ZstdError as error:
-                raise F2FSError(
-                    f"compressed cluster is invalid: {error}") from error
+                raise F2FSError(f"compressed cluster is invalid: {error}") from error
         else:
-            raise F2FSError(
-                f"unsupported F2FS compression algorithm {algorithm}")
+            raise F2FSError(f"unsupported F2FS compression algorithm {algorithm}")
         if len(data) != expected:
             raise F2FSError("compressed cluster has the wrong size")
         return data
@@ -348,9 +364,12 @@ class F2FSFilesystem:
         remaining = _u64(node, 16)
         direct_count = ADDRS_PER_BLOCK - ADDRS_PER_BLOCK % cluster_size
         inode_count = count - count % cluster_size
-        capacity = (inode_count + 2 * direct_count
-                    + 2 * direct_count * ADDRS_PER_BLOCK
-                    + direct_count * ADDRS_PER_BLOCK ** 2)
+        capacity = (
+            inode_count
+            + 2 * direct_count
+            + 2 * direct_count * ADDRS_PER_BLOCK
+            + direct_count * ADDRS_PER_BLOCK**2
+        )
         if (remaining + BLOCK_SIZE - 1) // BLOCK_SIZE > capacity:
             raise F2FSError("compressed file exceeds F2FS address capacity")
         addresses = self._addresses(node, extra, count, cluster_size)
@@ -361,10 +380,12 @@ class F2FSFilesystem:
             else:
                 if COMPRESS_ADDR in cluster:
                     raise F2FSError("misaligned compression marker")
-                data = b''.join(
-                    b'\0' * BLOCK_SIZE if address in (0, 0xffffffff)
+                data = b"".join(
+                    b"\0" * BLOCK_SIZE
+                    if address in (0, 0xFFFFFFFF)
                     else self._data_block(address)
-                    for address in cluster)
+                    for address in cluster
+                )
             length = min(remaining, len(data))
             yield data[:length]
             remaining -= length
@@ -375,7 +396,7 @@ class F2FSFilesystem:
         if size > capacity:
             raise F2FSError("inline data exceeds inode capacity")
         start = INODE_ADDR_OFFSET + (extra + 1) * 4
-        return node[start:start + size]
+        return node[start : start + size]
 
     def file_data(self, inode):
         node, extra, count = inode
@@ -388,8 +409,11 @@ class F2FSFilesystem:
         size = _u64(node, 16)
         for address in self._file_blocks(node, extra, count):
             length = min(size, BLOCK_SIZE)
-            yield b'\0' * length if address is None else (
-                self._data_block(address)[:length])
+            yield (
+                b"\0" * length
+                if address is None
+                else (self._data_block(address)[:length])
+            )
             size -= length
 
     def directory(self, inode):
@@ -400,7 +424,7 @@ class F2FSFilesystem:
             capacity = (count - 1) * 4
             start = INODE_ADDR_OFFSET + (extra + 1) * 4
             entries = capacity * 8 // 153
-            data = node[start:start + capacity]
+            data = node[start : start + capacity]
             yield from self._dentries(data, entries)
         else:
             for block in self.file_data(inode):
@@ -424,14 +448,12 @@ class F2FSFilesystem:
             nid = _u32(data, offset + 4)
             length = _u16(data, offset + 8)
             slots = (length + 7) // 8
-            if (not nid or not 1 <= length <= 255
-                    or index + slots > entries):
+            if not nid or not 1 <= length <= 255 or index + slots > entries:
                 raise F2FSError("invalid F2FS directory entry")
-            name = data[names_start + index * 8:
-                        names_start + index * 8 + length]
-            if len(name) != length or b'/' in name or b'\0' in name:
+            name = data[names_start + index * 8 : names_start + index * 8 + length]
+            if len(name) != length or b"/" in name or b"\0" in name:
                 raise F2FSError("invalid F2FS file name")
-            if name not in (b'.', b'..'):
+            if name not in (b".", b".."):
                 yield name, nid
             index += slots
 
@@ -461,15 +483,15 @@ def _extract_tree(fs, output_dir):
                 directory_modes.append((path, stat.S_IMODE(mode)))
                 pending.append((inode, path))
             elif stat.S_ISREG(mode):
-                with open(path, 'xb') as out:
+                with open(path, "xb") as out:
                     for chunk in fs.file_data(inode):
                         out.write(chunk)
                 os.chmod(path, stat.S_IMODE(mode))
             elif stat.S_ISLNK(mode):
                 if _u64(inode[0], 16) > BLOCK_SIZE:
                     raise F2FSError("symbolic link target is too long")
-                target = b''.join(fs.file_data(inode))
-                if b'\0' in target:
+                target = b"".join(fs.file_data(inode))
+                if b"\0" in target:
                     raise F2FSError("invalid symbolic link target")
                 os.symlink(os.fsdecode(target), path)
             else:

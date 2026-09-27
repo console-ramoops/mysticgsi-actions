@@ -30,9 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run Flake8
+      - name: Run Ruff
         run: |
-          flake8
+          ruff check .
 
       - name: Run Pytest
         run: |

@@ -10,7 +10,7 @@ import struct
 from .formats import sparse
 
 CHUNK = 1024 * 1024
-EXT4_MAGIC = b'\x53\xef'
+EXT4_MAGIC = b"\x53\xef"
 EXT4_MAGIC_OFFSET = 1080
 
 
@@ -26,7 +26,7 @@ def clean_vendor_ext4_header(image_path: str, logger=None) -> bool:
     if not os.path.isfile(image_path) or os.path.getsize(image_path) < 132000:
         return False
 
-    with open(image_path, 'rb') as f:
+    with open(image_path, "rb") as f:
         magic_bytes = f.read(12)
         is_moto = b"MOTO" in magic_bytes
         if not is_moto and b"ASUS" not in magic_bytes:
@@ -45,12 +45,14 @@ def clean_vendor_ext4_header(image_path: str, logger=None) -> bool:
 
     if logger:
         vendor = "Motorola" if is_moto else "ASUS"
-        logger(f"Stripping {vendor} header at offset {offset} "
-               f"from {os.path.basename(image_path)}...")
+        logger(
+            f"Stripping {vendor} header at offset {offset} "
+            f"from {os.path.basename(image_path)}..."
+        )
 
     temp_path = f"{image_path}.clean.tmp"
     try:
-        with open(image_path, 'rb') as src, open(temp_path, 'wb') as dst:
+        with open(image_path, "rb") as src, open(temp_path, "wb") as dst:
             src.seek(offset)
             shutil.copyfileobj(src, dst, CHUNK)
         shutil.move(temp_path, image_path)
@@ -64,7 +66,7 @@ def clean_signed_image(image_path: str, logger=None) -> bool:
     if not os.path.isfile(image_path) or os.path.getsize(image_path) < 16450:
         return False
 
-    with open(image_path, 'rb') as f:
+    with open(image_path, "rb") as f:
         magic = f.read(4)
         if magic not in (b"SSSS", b"BFBF"):
             return False
@@ -75,18 +77,20 @@ def clean_signed_image(image_path: str, logger=None) -> bool:
             if len(length_field) < 4:
                 return False
             payload_offset = 64
-            payload_len = struct.unpack('<I', length_field)[0]
+            payload_len = struct.unpack("<I", length_field)[0]
         else:
             payload_offset = 0x4040
             payload_len = None
 
     if logger:
-        logger(f"Stripping signed header ({magic.decode('latin1')}) "
-               f"from {os.path.basename(image_path)}...")
+        logger(
+            f"Stripping signed header ({magic.decode('latin1')}) "
+            f"from {os.path.basename(image_path)}..."
+        )
 
     temp_path = f"{image_path}.signed.tmp"
     try:
-        with open(image_path, 'rb') as src, open(temp_path, 'wb') as dst:
+        with open(image_path, "rb") as src, open(temp_path, "wb") as dst:
             src.seek(payload_offset)
             if payload_len:
                 remaining = payload_len

@@ -8,7 +8,7 @@ fixes are all welcome.
 ```sh
 ./setup_host.py --dev
 .venv/bin/python -m pytest tests -q
-.venv/bin/python -m flake8
+.venv/bin/ruff check .
 ```
 
 Both must pass before you open a pull request.

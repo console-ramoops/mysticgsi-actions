@@ -18,7 +18,7 @@ def is_packed(path):
 
 def raw_path(path):
     path = PART.sub(SUFFIX, path)
-    return path[:-len(SUFFIX)] if path.endswith(SUFFIX) else path
+    return path[: -len(SUFFIX)] if path.endswith(SUFFIX) else path
 
 
 def packed_path(path):
@@ -84,14 +84,16 @@ def _split(archive):
 def compress(path, force=False):
     raw = raw_path(path)
     archive = packed_path(path)
-    if (not force and archive_exists(archive)
-            and archive_mtime(archive) >= os.path.getmtime(raw)):
+    if (
+        not force
+        and archive_exists(archive)
+        and archive_mtime(archive) >= os.path.getmtime(raw)
+    ):
         return None
 
     tmp = _tmp_in(archive)
     try:
-        with open(raw, "rb") as src, \
-                lzma.open(tmp, "wb", preset=PRESET) as out:
+        with open(raw, "rb") as src, lzma.open(tmp, "wb", preset=PRESET) as out:
             while True:
                 buf = src.read(CHUNK)
                 if not buf:

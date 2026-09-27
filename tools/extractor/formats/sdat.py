@@ -8,6 +8,7 @@ import tempfile
 
 try:
     import brotli
+
     HAS_BROTLI = True
 except ImportError:
     HAS_BROTLI = False
@@ -15,18 +16,18 @@ except ImportError:
 from ...config import BLOCK_SIZE
 
 MB = 1024 * 1024
-DAT_EXTENSIONS = ('.new.dat', '.new.dat.br', '.new.dat.xz')
+DAT_EXTENSIONS = (".new.dat", ".new.dat.br", ".new.dat.xz")
 
 
 def rangeset(src: str) -> List[Tuple[int, int]]:
-    src_set = [int(item) for item in src.split(',')]
+    src_set = [int(item) for item in src.split(",")]
     if len(src_set) != src_set[0] + 1:
         raise ValueError(f"Invalid rangeset syntax: {src}")
     return [(src_set[i], src_set[i + 1]) for i in range(1, len(src_set), 2)]
 
 
 def _parse_transfer_list(path: str):
-    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
         lines = [line.strip() for line in f if line.strip()]
     if len(lines) < 2:
         return None
@@ -35,8 +36,8 @@ def _parse_transfer_list(path: str):
     cmd_start_idx = 4 if int(lines[0]) >= 2 else 2
     commands = []
     for line in lines[cmd_start_idx:]:
-        parts = line.split(' ')
-        if parts[0] in ('new', 'erase', 'zero'):
+        parts = line.split(" ")
+        if parts[0] in ("new", "erase", "zero"):
             commands.append((parts[0], rangeset(parts[1])))
     return commands
 
@@ -69,7 +70,7 @@ class _ConcatReader(io.RawIOBase):
     def readinto(self, buffer):
         while self._paths or self._file:
             if self._file is None:
-                self._file = open(self._paths.pop(0), 'rb')
+                self._file = open(self._paths.pop(0), "rb")
             n = self._file.readinto(buffer)
             if n:
                 return n
@@ -89,7 +90,7 @@ class _BrotliReader(io.RawIOBase):
             raise RuntimeError("brotli package required to decompress .dat.br")
         self._raw = raw
         self._decompressor = brotli.Decompressor()
-        self._pending = b''
+        self._pending = b""
 
     def readable(self):
         return True
@@ -108,23 +109,22 @@ class _BrotliReader(io.RawIOBase):
 
 def _open_data(paths: List[str]):
     raw = io.BufferedReader(_ConcatReader(paths), MB)
-    name = paths[0].split('.new.dat', 1)[1]
-    if name.startswith('.br'):
+    name = paths[0].split(".new.dat", 1)[1]
+    if name.startswith(".br"):
         return io.BufferedReader(_BrotliReader(raw), MB)
-    if name.startswith('.xz'):
+    if name.startswith(".xz"):
         return lzma.open(raw)
     return raw
 
 
 def _apply_commands(commands, data, output_img_path: str):
     block_sets = [pair for _, blocks in commands for pair in blocks]
-    max_file_size = (max(end for _, end in block_sets) * BLOCK_SIZE
-                     if block_sets else 0)
+    max_file_size = max(end for _, end in block_sets) * BLOCK_SIZE if block_sets else 0
 
-    with open(output_img_path, 'wb') as out_f:
+    with open(output_img_path, "wb") as out_f:
         # "new" data is stored in command order; zero/erase leave holes.
         for cmd, blocks in commands:
-            if cmd != 'new':
+            if cmd != "new":
                 continue
             for begin, end in blocks:
                 out_f.seek(begin * BLOCK_SIZE)
@@ -139,7 +139,7 @@ def _apply_commands(commands, data, output_img_path: str):
 
 
 def sdat_to_img(transfer_list_path: str, output_img_path: str) -> bool:
-    prefix = transfer_list_path[:-len('.transfer.list')]
+    prefix = transfer_list_path[: -len(".transfer.list")]
     commands = _parse_transfer_list(transfer_list_path)
     pieces = find_new_dat(prefix)
     if commands is None or pieces is None:
@@ -149,8 +149,7 @@ def sdat_to_img(transfer_list_path: str, output_img_path: str) -> bool:
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(
-            prefix="sdat-", dir=out_dir or ".") as staging:
+    with tempfile.TemporaryDirectory(prefix="sdat-", dir=out_dir or ".") as staging:
         converted = os.path.join(staging, "image.img")
         with _open_data(pieces) as data:
             _apply_commands(commands, data, converted)

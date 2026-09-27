@@ -1,5 +1,4 @@
 # Development tools: tests and lint.
 -r requirements.txt
 pytest>=8.0
-flake8>=7.0
-pep8-naming>=0.14
+ruff>=0.11

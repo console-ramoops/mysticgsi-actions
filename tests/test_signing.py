@@ -25,13 +25,20 @@ def test_signed_image_has_valid_footer_and_detects_corruption(tmp_path):
         assert stream.read(len(payload)) == payload
         stream.seek(-64, os.SEEK_END)
         magic, major, minor, original, offset, size = struct.unpack(
-            "!4sIIQQQ28x", stream.read(64))
-        assert (magic, major, minor, original) == (
-            b"AVBf", 1, 0, len(payload))
+            "!4sIIQQQ28x", stream.read(64)
+        )
+        assert (magic, major, minor, original) == (b"AVBf", 1, 0, len(payload))
         assert original < offset < image.stat().st_size - 64
         assert size > 0
-    verify = [sys.executable, signing.AVBTOOL, "verify_image",
-              "--image", str(image), "--key", signing.TEST_KEY]
+    verify = [
+        sys.executable,
+        signing.AVBTOOL,
+        "verify_image",
+        "--image",
+        str(image),
+        "--key",
+        signing.TEST_KEY,
+    ]
     assert subprocess.run(verify, capture_output=True).returncode == 0
 
     with image.open("r+b") as stream:
@@ -42,8 +49,7 @@ def test_signed_image_has_valid_footer_and_detects_corruption(tmp_path):
 
 @pytest.mark.skipif(not shutil.which("openssl"), reason="needs OpenSSL")
 @pytest.mark.parametrize("key_bits", [None, 2048, 4096])
-def test_rebuild_publishes_and_compresses_signed_image(
-        tmp_path, monkeypatch, key_bits):
+def test_rebuild_publishes_and_compresses_signed_image(tmp_path, monkeypatch, key_bits):
     monkeypatch.chdir(tmp_path)
     system = tmp_path / "tmp/test/images/system"
     system.mkdir(parents=True)
@@ -56,15 +62,32 @@ def test_rebuild_publishes_and_compresses_signed_image(
     args = ["cli.py", "rebuild", "test", "--compress"]
     if key_bits:
         key_path = str(tmp_path / "custom key.pem")
-        subprocess.run([
-            "openssl", "genpkey", "-algorithm", "RSA",
-            "-pkeyopt", f"rsa_keygen_bits:{key_bits}", "-out", key_path,
-        ], check=True, capture_output=True)
+        subprocess.run(
+            [
+                "openssl",
+                "genpkey",
+                "-algorithm",
+                "RSA",
+                "-pkeyopt",
+                f"rsa_keygen_bits:{key_bits}",
+                "-out",
+                key_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
         args += ["--avb-key", key_path]
-    (tmp_path / "tmp/gsilist.json").write_text(json.dumps([{
-        "rom_name": "test", "output_name": "rebuilt",
-        "output": "Raw Image Size: old\n",
-    }]))
+    (tmp_path / "tmp/gsilist.json").write_text(
+        json.dumps(
+            [
+                {
+                    "rom_name": "test",
+                    "output_name": "rebuilt",
+                    "output": "Raw Image Size: old\n",
+                }
+            ]
+        )
+    )
 
     def build_image(**kwargs):
         Path(kwargs["output_image"]).write_bytes(payload)
@@ -81,29 +104,60 @@ def test_rebuild_publishes_and_compresses_signed_image(
         assert archive.namelist() == ["system.img"]
         assert archive.read("system.img") == image.read_bytes()
     (out / "system.img").symlink_to(image.name)
-    result = subprocess.run([
-        sys.executable, signing.AVBTOOL, "verify_image",
-        "--image", str(out / "system.img"), "--key", key_path,
-    ], capture_output=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            signing.AVBTOOL,
+            "verify_image",
+            "--image",
+            str(out / "system.img"),
+            "--key",
+            key_path,
+        ],
+        capture_output=True,
+    )
     assert result.returncode == 0
     if key_bits:
-        result = subprocess.run([
-            sys.executable, signing.AVBTOOL, "verify_image",
-            "--image", str(out / "system.img"), "--key", signing.TEST_KEY,
-        ], capture_output=True)
+        result = subprocess.run(
+            [
+                sys.executable,
+                signing.AVBTOOL,
+                "verify_image",
+                "--image",
+                str(out / "system.img"),
+                "--key",
+                signing.TEST_KEY,
+            ],
+            capture_output=True,
+        )
         assert result.returncode != 0
-    result = subprocess.run([
-        sys.executable, signing.AVBTOOL, "info_image",
-        "--image", str(image),
-    ], capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            signing.AVBTOOL,
+            "info_image",
+            "--image",
+            str(image),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     assert f"SHA256_RSA{key_bits or 2048}" in result.stdout
 
 
-@pytest.mark.parametrize("key_kind", [
-    "empty", "missing", "malformed", "public", "encrypted", "unsupported",
-])
-def test_invalid_custom_key_stops_before_build(
-        tmp_path, monkeypatch, key_kind):
+@pytest.mark.parametrize(
+    "key_kind",
+    [
+        "empty",
+        "missing",
+        "malformed",
+        "public",
+        "encrypted",
+        "unsupported",
+    ],
+)
+def test_invalid_custom_key_stops_before_build(tmp_path, monkeypatch, key_kind):
     from Crypto.PublicKey import RSA
 
     key_path = tmp_path / "key.pem"
@@ -123,20 +177,32 @@ def test_invalid_custom_key_stops_before_build(
         pytest.fail("invalid key reached the build pipeline")
 
     monkeypatch.setattr(RomPorter, "build", unexpected_build)
-    monkeypatch.setattr(sys, "argv", [
-        "cli.py", "build", "test", "firmware.zip",
-        "--avb-key", "" if key_kind == "empty" else str(key_path),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cli.py",
+            "build",
+            "test",
+            "firmware.zip",
+            "--avb-key",
+            "" if key_kind == "empty" else str(key_path),
+        ],
+    )
     with pytest.raises(SystemExit) as error:
         cli.main()
     assert error.value.code == 2
 
 
-@pytest.mark.parametrize("failed_step", [
-    "add_hashtree_footer", "verify_image", "invalid_key",
-])
-def test_signing_failure_preserves_published_image(
-        tmp_path, monkeypatch, failed_step):
+@pytest.mark.parametrize(
+    "failed_step",
+    [
+        "add_hashtree_footer",
+        "verify_image",
+        "invalid_key",
+    ],
+)
+def test_signing_failure_preserves_published_image(tmp_path, monkeypatch, failed_step):
     monkeypatch.chdir(tmp_path)
     system = tmp_path / "system"
     system.mkdir()

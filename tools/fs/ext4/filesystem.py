@@ -18,17 +18,17 @@ INCOMPAT_META_BG = 0x10
 INCOMPAT_64BIT = 0x80
 _INCOMPAT_SUPPORTED = (
     INCOMPAT_FILETYPE
-    | 0x4       # recover: a pending journal replay only affects recent writes
+    | 0x4  # recover: a pending journal replay only affects recent writes
     | INCOMPAT_META_BG
-    | 0x40      # extents
+    | 0x40  # extents
     | INCOMPAT_64BIT
-    | 0x100     # mmp
-    | 0x200     # flex_bg
-    | 0x400     # ea_inode
-    | 0x2000    # csum_seed
-    | 0x4000    # largedir
-    | 0x8000    # inline_data
-    | 0x20000   # casefold
+    | 0x100  # mmp
+    | 0x200  # flex_bg
+    | 0x400  # ea_inode
+    | 0x2000  # csum_seed
+    | 0x4000  # largedir
+    | 0x8000  # inline_data
+    | 0x20000  # casefold
 )
 _INCOMPAT_NAMES = {
     0x1: "compression",
@@ -62,8 +62,7 @@ class Ext4Error(Exception):
 def _decode_time(seconds, extra):
     # The low two bits of *_extra extend the signed 32-bit seconds to 34
     # bits; the other 30 bits are nanoseconds.
-    return ((seconds + ((extra & 3) << 32)) * 1_000_000_000
-            + (extra >> 2))
+    return (seconds + ((extra & 3) << 32)) * 1_000_000_000 + (extra >> 2)
 
 
 class Inode:
@@ -72,12 +71,13 @@ class Inode:
     def __init__(self, number, raw):
         self.number = number
         self.raw = raw
-        (self.mode, uid_lo, size_lo, atime, _, mtime, _, gid_lo, _, _,
-         self.flags) = struct.unpack_from('<HHIiiiIHHII', raw)
+        (self.mode, uid_lo, size_lo, atime, _, mtime, _, gid_lo, _, _, self.flags) = (
+            struct.unpack_from("<HHIiiiIHHII", raw)
+        )
         self.i_block = raw[0x28:0x64]
-        file_acl_lo, = struct.unpack_from('<I', raw, 0x68)
-        size_hi, = struct.unpack_from('<I', raw, 0x6C)
-        file_acl_hi, uid_hi, gid_hi = struct.unpack_from('<HHH', raw, 0x76)
+        (file_acl_lo,) = struct.unpack_from("<I", raw, 0x68)
+        (size_hi,) = struct.unpack_from("<I", raw, 0x6C)
+        file_acl_hi, uid_hi, gid_hi = struct.unpack_from("<HHH", raw, 0x76)
         self.file_acl = file_acl_lo | file_acl_hi << 32
         self.size = size_lo | size_hi << 32
         self.uid = uid_lo | uid_hi << 16
@@ -85,15 +85,15 @@ class Inode:
 
         extra_isize = 0
         if len(raw) > 0x82:
-            extra_isize, = struct.unpack_from('<H', raw, 0x80)
+            (extra_isize,) = struct.unpack_from("<H", raw, 0x80)
             if 128 + extra_isize > len(raw):
                 extra_isize = 0
         self.extra_isize = extra_isize
         mtime_extra = atime_extra = 0
         if extra_isize >= 0x8C - 128:
-            mtime_extra, = struct.unpack_from('<I', raw, 0x88)
+            (mtime_extra,) = struct.unpack_from("<I", raw, 0x88)
         if extra_isize >= 0x90 - 128:
-            atime_extra, = struct.unpack_from('<I', raw, 0x8C)
+            (atime_extra,) = struct.unpack_from("<I", raw, 0x8C)
         self.atime_ns = _decode_time(atime, atime_extra)
         self.mtime_ns = _decode_time(mtime, mtime_extra)
 
@@ -122,7 +122,7 @@ class Ext4Filesystem:
     """A raw (non-sparse) ext2/3/4 image opened read-only."""
 
     def __init__(self, path):
-        self._file = open(path, 'rb')
+        self._file = open(path, "rb")
         self._inode_tables = {}
         try:
             self._load_superblock()
@@ -143,8 +143,9 @@ class Ext4Filesystem:
         self._file.seek(offset)
         data = self._file.read(length)
         if len(data) != length:
-            raise Ext4Error(f"image truncated: cannot read {length} bytes "
-                            f"at offset {offset}")
+            raise Ext4Error(
+                f"image truncated: cannot read {length} bytes at offset {offset}"
+            )
         return data
 
     def _read_block(self, block):
@@ -152,59 +153,74 @@ class Ext4Filesystem:
 
     def _load_superblock(self):
         sb = self._read(SUPERBLOCK_OFFSET, 1024)
-        magic, = struct.unpack_from('<H', sb, 0x38)
+        (magic,) = struct.unpack_from("<H", sb, 0x38)
         if magic != SUPERBLOCK_MAGIC:
             raise Ext4Error("not an ext2/3/4 filesystem (bad magic)")
 
-        (self.inodes_count, blocks_lo, _, _, _, self.first_data_block,
-         log_block_size, _, self.blocks_per_group, _,
-         self.inodes_per_group) = struct.unpack_from('<11I', sb)
+        (
+            self.inodes_count,
+            blocks_lo,
+            _,
+            _,
+            _,
+            self.first_data_block,
+            log_block_size,
+            _,
+            self.blocks_per_group,
+            _,
+            self.inodes_per_group,
+        ) = struct.unpack_from("<11I", sb)
         if log_block_size > 6:
             raise Ext4Error(f"invalid block size 2^{10 + log_block_size}")
         self.block_size = 1024 << log_block_size
         if not self.blocks_per_group or not self.inodes_per_group:
             raise Ext4Error("invalid superblock geometry")
 
-        rev_level, = struct.unpack_from('<I', sb, 0x4C)
+        (rev_level,) = struct.unpack_from("<I", sb, 0x4C)
         if rev_level >= 1:
-            self.inode_size, = struct.unpack_from('<H', sb, 0x58)
-            self.compat, self.incompat, self.ro_compat = (
-                struct.unpack_from('<3I', sb, 0x5C))
+            (self.inode_size,) = struct.unpack_from("<H", sb, 0x58)
+            self.compat, self.incompat, self.ro_compat = struct.unpack_from(
+                "<3I", sb, 0x5C
+            )
         else:
             self.inode_size = 128
             self.compat = self.incompat = self.ro_compat = 0
-        if (self.inode_size < 128 or self.inode_size > self.block_size
-                or self.inode_size & (self.inode_size - 1)):
+        if (
+            self.inode_size < 128
+            or self.inode_size > self.block_size
+            or self.inode_size & (self.inode_size - 1)
+        ):
             raise Ext4Error(f"invalid inode size {self.inode_size}")
 
         self._check_features()
 
         self.desc_size = 32
         if self.incompat & INCOMPAT_64BIT:
-            self.desc_size, = struct.unpack_from('<H', sb, 0xFE)
-            if (self.desc_size < 32 or self.desc_size > self.block_size
-                    or self.desc_size & (self.desc_size - 1)):
-                raise Ext4Error(
-                    f"invalid group descriptor size {self.desc_size}")
-        self.first_meta_bg, = struct.unpack_from('<I', sb, 0x104)
+            (self.desc_size,) = struct.unpack_from("<H", sb, 0xFE)
+            if (
+                self.desc_size < 32
+                or self.desc_size > self.block_size
+                or self.desc_size & (self.desc_size - 1)
+            ):
+                raise Ext4Error(f"invalid group descriptor size {self.desc_size}")
+        (self.first_meta_bg,) = struct.unpack_from("<I", sb, 0x104)
         blocks_hi = 0
         if self.incompat & INCOMPAT_64BIT:
-            blocks_hi, = struct.unpack_from('<I', sb, 0x150)
+            (blocks_hi,) = struct.unpack_from("<I", sb, 0x150)
         self.blocks_count = blocks_lo | blocks_hi << 32
-        self.backup_bgs = struct.unpack_from('<2I', sb, 0x24C)
-        self.group_count = -(-(self.blocks_count - self.first_data_block)
-                             // self.blocks_per_group)
+        self.backup_bgs = struct.unpack_from("<2I", sb, 0x24C)
+        self.group_count = -(
+            -(self.blocks_count - self.first_data_block) // self.blocks_per_group
+        )
 
     def _check_features(self):
         unknown = self.incompat & ~_INCOMPAT_SUPPORTED
         if unknown:
-            names = [name for bit, name in _INCOMPAT_NAMES.items()
-                     if unknown & bit]
+            names = [name for bit, name in _INCOMPAT_NAMES.items() if unknown & bit]
             leftover = unknown & ~sum(_INCOMPAT_NAMES)
             if leftover:
                 names.append(f"incompat 0x{leftover:x}")
-            raise Ext4Error(
-                f"unsupported ext4 features: {', '.join(names)}")
+            raise Ext4Error(f"unsupported ext4 features: {', '.join(names)}")
         for bit, name in _RO_COMPAT_UNSUPPORTED.items():
             if self.ro_compat & bit:
                 raise Ext4Error(f"unsupported ext4 feature: {name}")
@@ -230,20 +246,23 @@ class Ext4Filesystem:
             return table
         per_block = self.block_size // self.desc_size
         meta_group, index = divmod(group, per_block)
-        if (self.incompat & INCOMPAT_META_BG
-                and meta_group >= self.first_meta_bg):
+        if self.incompat & INCOMPAT_META_BG and meta_group >= self.first_meta_bg:
             # meta_bg keeps each descriptor block in the first group of
             # the meta group it describes, right after any superblock.
             first = meta_group * per_block
-            block = (first * self.blocks_per_group + self.first_data_block
-                     + self._has_super(first))
+            block = (
+                first * self.blocks_per_group
+                + self.first_data_block
+                + self._has_super(first)
+            )
         else:
             block = self.first_data_block + 1 + meta_group
-        desc = self._read(block * self.block_size + index * self.desc_size,
-                          self.desc_size)
-        table, = struct.unpack_from('<I', desc, 0x8)
+        desc = self._read(
+            block * self.block_size + index * self.desc_size, self.desc_size
+        )
+        (table,) = struct.unpack_from("<I", desc, 0x8)
         if self.desc_size >= 64:
-            table |= struct.unpack_from('<I', desc, 0x28)[0] << 32
+            table |= struct.unpack_from("<I", desc, 0x28)[0] << 32
         self._inode_tables[group] = table
         return table
 
@@ -253,13 +272,12 @@ class Ext4Filesystem:
         group, index = divmod(number - 1, self.inodes_per_group)
         if group >= self.group_count:
             raise Ext4Error(f"inode number {number} out of range")
-        offset = (self._inode_table(group) * self.block_size
-                  + index * self.inode_size)
+        offset = self._inode_table(group) * self.block_size + index * self.inode_size
         return Inode(number, self._read(offset, self.inode_size))
 
     def lookup(self, path):
         inode = self.read_inode(ROOT_INODE)
-        for part in path.split('/'):
+        for part in path.split("/"):
             if not part:
                 continue
             if not inode.is_dir:
@@ -278,29 +296,34 @@ class Ext4Filesystem:
         return self.lookup(path)
 
     def _extent_runs(self, node, expected_depth=None):
-        magic, entries, _, depth = struct.unpack_from('<4H', node)
+        magic, entries, _, depth = struct.unpack_from("<4H", node)
         if magic != EXTENT_MAGIC:
             raise Ext4Error("bad extent header magic")
-        if (depth > EXTENT_MAX_DEPTH
-                or expected_depth is not None and depth != expected_depth):
+        if (
+            depth > EXTENT_MAX_DEPTH
+            or expected_depth is not None
+            and depth != expected_depth
+        ):
             raise Ext4Error(f"bad extent tree depth {depth}")
         if 12 + entries * 12 > len(node):
             raise Ext4Error("extent node entry count exceeds node size")
         for offset in range(12, 12 + entries * 12, 12):
             if depth == 0:
                 logical, length, start_hi, start_lo = struct.unpack_from(
-                    '<IHHI', node, offset)
+                    "<IHHI", node, offset
+                )
                 initialized = length <= EXTENT_UNINIT_BASE
                 if not initialized:
                     length -= EXTENT_UNINIT_BASE
                 yield logical, start_hi << 32 | start_lo, length, initialized
             else:
-                _, leaf_lo, leaf_hi = struct.unpack_from('<IIH', node, offset)
+                _, leaf_lo, leaf_hi = struct.unpack_from("<IIH", node, offset)
                 yield from self._extent_runs(
-                    self._read_block(leaf_hi << 32 | leaf_lo), depth - 1)
+                    self._read_block(leaf_hi << 32 | leaf_lo), depth - 1
+                )
 
     def _blockmap_runs(self, i_block, nblocks):
-        pointers = struct.unpack('<15I', i_block)
+        pointers = struct.unpack("<15I", i_block)
         yield from _pointer_runs(pointers[:12], 0, nblocks)
         logical = 12
         per_block = self.block_size // 4
@@ -308,13 +331,12 @@ class Ext4Filesystem:
             if logical >= nblocks:
                 return
             if pointer:
-                yield from self._indirect_runs(pointer, level, logical,
-                                               nblocks)
-            logical += per_block ** level
+                yield from self._indirect_runs(pointer, level, logical, nblocks)
+            logical += per_block**level
 
     def _indirect_runs(self, block, level, logical, nblocks):
         per_block = self.block_size // 4
-        pointers = struct.unpack(f'<{per_block}I', self._read_block(block))
+        pointers = struct.unpack(f"<{per_block}I", self._read_block(block))
         if level == 1:
             yield from _pointer_runs(pointers, logical, nblocks)
             return
@@ -323,8 +345,7 @@ class Ext4Filesystem:
             if logical >= nblocks:
                 return
             if pointer:
-                yield from self._indirect_runs(pointer, level - 1, logical,
-                                               nblocks)
+                yield from self._indirect_runs(pointer, level - 1, logical, nblocks)
             logical += span
 
     def _data_ranges(self, inode):
@@ -348,54 +369,54 @@ class Ext4Filesystem:
         """Value of xattr index/name in the entry list at buf[pos:], whose
         value offsets are relative to base, or None."""
         while pos + 16 <= len(buf):
-            name_len, e_index, value_offs, value_inum, value_size = (
-                struct.unpack_from('<BBHII', buf, pos))
+            name_len, e_index, value_offs, value_inum, value_size = struct.unpack_from(
+                "<BBHII", buf, pos
+            )
             if not (name_len or e_index or value_offs or value_inum):
                 break
-            if (e_index == index
-                    and buf[pos + 16:pos + 16 + name_len] == name):
+            if e_index == index and buf[pos + 16 : pos + 16 + name_len] == name:
                 if value_inum:
-                    raise Ext4Error(f"{what} in an EA inode is not "
-                                    "supported")
+                    raise Ext4Error(f"{what} in an EA inode is not supported")
                 end = base + value_offs + value_size
                 if end > len(buf):
                     raise Ext4Error(f"corrupt {what} xattr")
-                return buf[base + value_offs:end]
+                return buf[base + value_offs : end]
             pos += (16 + name_len + 3) & ~3
         return None
 
     def _ibody_xattr(self, inode, index, name, what):
         raw = inode.raw
         start = 128 + inode.extra_isize
-        if (start + 4 > len(raw) or struct.unpack_from(
-                '<I', raw, start)[0] != XATTR_MAGIC):
+        if (
+            start + 4 > len(raw)
+            or struct.unpack_from("<I", raw, start)[0] != XATTR_MAGIC
+        ):
             return None
         # In-inode value offsets are relative to the first entry.
-        return self._find_xattr(raw, start + 4, start + 4, index, name,
-                                what)
+        return self._find_xattr(raw, start + 4, start + 4, index, name, what)
 
     def _system_data_xattr(self, inode):
-        return self._ibody_xattr(inode, XATTR_INDEX_SYSTEM, b'data',
-                                 "inline data") or b''
+        return (
+            self._ibody_xattr(inode, XATTR_INDEX_SYSTEM, b"data", "inline data") or b""
+        )
 
     def selinux_label(self, inode):
         """The inode's security.selinux value (without the trailing NUL),
         or None if it has none."""
         what = "SELinux label"
-        value = self._ibody_xattr(inode, XATTR_INDEX_SECURITY, b'selinux',
-                                  what)
+        value = self._ibody_xattr(inode, XATTR_INDEX_SECURITY, b"selinux", what)
         if value is None and inode.file_acl:
             block = self._read_block(inode.file_acl)
-            if struct.unpack_from('<I', block)[0] == XATTR_MAGIC:
+            if struct.unpack_from("<I", block)[0] == XATTR_MAGIC:
                 # Block value offsets are relative to the block start.
-                value = self._find_xattr(block, XATTR_BLOCK_HEADER, 0,
-                                         XATTR_INDEX_SECURITY, b'selinux',
-                                         what)
-        return None if value is None else value.rstrip(b'\0')
+                value = self._find_xattr(
+                    block, XATTR_BLOCK_HEADER, 0, XATTR_INDEX_SECURITY, b"selinux", what
+                )
+        return None if value is None else value.rstrip(b"\0")
 
     def _inline_data(self, inode):
         data = inode.i_block + self._system_data_xattr(inode)
-        return data[:inode.size]
+        return data[: inode.size]
 
     def _rec_len(self, value):
         # 64 KiB blocks cannot express a 65536-byte rec_len in 16 bits, so
@@ -410,19 +431,20 @@ class Ext4Filesystem:
         filetype = self.incompat & INCOMPAT_FILETYPE
         pos = 0
         while pos + 8 <= len(buf):
-            number, rec_len, name_len = struct.unpack_from('<IHH', buf, pos)
+            number, rec_len, name_len = struct.unpack_from("<IHH", buf, pos)
             rec_len = self._rec_len(rec_len)
             if filetype:
                 name_len &= 0xFF
             if rec_len < 8 or rec_len % 4 or pos + rec_len > len(buf):
-                raise Ext4Error(f"corrupt directory entry (rec_len "
-                                f"{rec_len} at offset {pos})")
+                raise Ext4Error(
+                    f"corrupt directory entry (rec_len {rec_len} at offset {pos})"
+                )
             # inode 0 marks unused space, htree nodes and checksum tails.
             if number:
                 if name_len + 8 > rec_len:
                     raise Ext4Error("corrupt directory entry name length")
-                name = buf[pos + 8:pos + 8 + name_len]
-                if name not in (b'.', b'..'):
+                name = buf[pos + 8 : pos + 8 + name_len]
+                if name not in (b".", b".."):
                     yield name, number
             pos += rec_len
 
@@ -439,22 +461,24 @@ class Ext4Filesystem:
         bs = self.block_size
         for _, image_offset, length in self._data_ranges(inode):
             for block in range(0, length, bs):
-                yield from self._parse_dirents(
-                    self._read(image_offset + block, bs))
+                yield from self._parse_dirents(self._read(image_offset + block, bs))
 
     def read_link(self, inode):
         if inode.flags & INLINE_DATA_FL:
             return self._inline_data(inode)
-        uses_extents = (inode.flags & EXTENTS_FL and struct.unpack_from(
-            '<H', inode.i_block)[0] == EXTENT_MAGIC)
+        uses_extents = (
+            inode.flags & EXTENTS_FL
+            and struct.unpack_from("<H", inode.i_block)[0] == EXTENT_MAGIC
+        )
         if inode.size < 60 and not uses_extents:
-            return inode.i_block[:inode.size]
+            return inode.i_block[: inode.size]
         if inode.size > self.block_size:
             raise Ext4Error(f"symlink target too long ({inode.size} bytes)")
         target = bytearray(inode.size)
         for file_offset, image_offset, length in self._data_ranges(inode):
-            target[file_offset:file_offset + length] = self._read(
-                image_offset, length)
+            target[file_offset : file_offset + length] = self._read(
+                image_offset, length
+            )
         return bytes(target)
 
     def write_file(self, inode, out):
@@ -463,8 +487,7 @@ class Ext4Filesystem:
         if inode.flags & INLINE_DATA_FL:
             out.write(self._inline_data(inode))
         else:
-            for file_offset, image_offset, length in self._data_ranges(
-                    inode):
+            for file_offset, image_offset, length in self._data_ranges(inode):
                 out.seek(file_offset)
                 self._file.seek(image_offset)
                 while length:

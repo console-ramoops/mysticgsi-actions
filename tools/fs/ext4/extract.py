@@ -6,8 +6,13 @@ import os
 
 from .filesystem import ROOT_INODE, Ext4Error, Ext4Filesystem
 
-_OPEN_FLAGS = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-               | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0))
+_OPEN_FLAGS = (
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_TRUNC
+    | getattr(os, "O_BINARY", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
 
 
 def _make_dir(path):
@@ -22,7 +27,7 @@ def _make_dir(path):
 
 def _write_file(fs, inode, path):
     fd = os.open(path, _OPEN_FLAGS, 0o666)
-    with os.fdopen(fd, 'wb') as out:
+    with os.fdopen(fd, "wb") as out:
         fs.write_file(inode, out)
     try:
         os.utime(path, ns=(inode.atime_ns, inode.mtime_ns))
@@ -35,8 +40,9 @@ def _write_symlink(fs, inode, path):
     try:
         os.symlink(target, path)
     except OSError:
-        with open(f"{path}.symlink", 'w', encoding='utf-8',
-                  errors='surrogateescape') as f:
+        with open(
+            f"{path}.symlink", "w", encoding="utf-8", errors="surrogateescape"
+        ) as f:
             f.write(target)
 
 
@@ -73,8 +79,7 @@ def extract_ext4(image_path: str, output_dir: str, logger=None) -> bool:
             try:
                 entries = list(fs.iter_dir(directory))
             except Exception as e:
-                log(f"Error extracting {rel or '/'} "
-                    f"(inode {directory.number}): {e}")
+                log(f"Error extracting {rel or '/'} (inode {directory.number}): {e}")
                 failures += 1
                 continue
             for name, number in entries:

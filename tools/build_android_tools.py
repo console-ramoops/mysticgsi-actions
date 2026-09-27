@@ -20,8 +20,10 @@ import buildlock  # noqa: E402
 
 VERSION = "37.0.0"
 SHA256 = "2725d09f892a3a38e534429f47a321f58ecf6a3169caa42c915fb2cb7d46be0e"
-URL = ("https://github.com/nmeum/android-tools/releases/download/"
-       f"{VERSION}/android-tools-{VERSION}.tar.xz")
+URL = (
+    "https://github.com/nmeum/android-tools/releases/download/"
+    f"{VERSION}/android-tools-{VERSION}.tar.xz"
+)
 TARGETS = ("e2fsdroid", "mke2fs.android")
 DESTINATION = ROOT / "tools" / "bin"
 REQUIRED_COMMANDS = ("cmake", "ninja", "pkg-config")
@@ -48,8 +50,10 @@ def download(cache: Path) -> Path:
         partial = archive.with_suffix(".download")
         try:
             print(f"Downloading Android tools {VERSION}..", flush=True)
-            with urllib.request.urlopen(URL, timeout=60) as src, \
-                    partial.open("wb") as dst:
+            with (
+                urllib.request.urlopen(URL, timeout=60) as src,
+                partial.open("wb") as dst,
+            ):
                 shutil.copyfileobj(src, dst)
             partial.replace(archive)
         finally:
@@ -60,18 +64,23 @@ def download(cache: Path) -> Path:
 
 
 def patch_for_darwin(vendor: Path):
-    replace_once(vendor / "CMakeLists.mke2fs.txt",
-                 "if(NOT APPLE)\nadd_executable(e2fsdroid",
-                 "if(TRUE)\nadd_executable(e2fsdroid")
-    replace_once(vendor / "CMakeLists.adb.txt",
-                 "if (NOT APPLE AND NOT WIN32)", "if (NOT WIN32)")
+    replace_once(
+        vendor / "CMakeLists.mke2fs.txt",
+        "if(NOT APPLE)\nadd_executable(e2fsdroid",
+        "if(TRUE)\nadd_executable(e2fsdroid",
+    )
+    replace_once(
+        vendor / "CMakeLists.adb.txt", "if (NOT APPLE AND NOT WIN32)", "if (NOT WIN32)"
+    )
     # Homebrew's protobuf include dir is /opt/homebrew/include, added ahead
     # of the vendored headers; stale copies of those there (e.g. an old
     # libsparse sparse/sparse.h) would shadow them. As a system include it
     # is searched last.
-    replace_once(vendor / "CMakeLists.txt",
-                 "include_directories(${PROTOBUF_INCLUDE_DIRS})",
-                 "include_directories(SYSTEM ${PROTOBUF_INCLUDE_DIRS})")
+    replace_once(
+        vendor / "CMakeLists.txt",
+        "include_directories(${PROTOBUF_INCLUDE_DIRS})",
+        "include_directories(SYSTEM ${PROTOBUF_INCLUDE_DIRS})",
+    )
     # Upstream omits e2fsdroid/fs_config on Darwin because the SDK has no
     # linux/capability.h. Supply only the on-disk metadata definitions used
     # by these tools, keeping SELinux labels and Android permissions intact.
@@ -82,8 +91,7 @@ def patch_for_darwin(vendor: Path):
 def build():
     missing = [c for c in REQUIRED_COMMANDS if not shutil.which(c)]
     if missing:
-        raise RuntimeError(
-            f"Missing {', '.join(missing)}; run ./setup_host.py first")
+        raise RuntimeError(f"Missing {', '.join(missing)}; run ./setup_host.py first")
 
     cache = ROOT / "tmp" / "android-tools-src"
     cache.mkdir(parents=True, exist_ok=True)
@@ -97,8 +105,10 @@ def build():
         tar.extractall(cache, filter="data")
     vendor = source / "vendor"
     with (vendor / "CMakeLists.txt").open("a") as f:
-        f.write("\ninclude_directories("
-                "boringssl/third_party/googletest/googletest/include)\n")
+        f.write(
+            "\ninclude_directories("
+            "boringssl/third_party/googletest/googletest/include)\n"
+        )
 
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -108,15 +118,26 @@ def build():
     ]
     if sys.platform == "darwin":
         patch_for_darwin(vendor)
-        prefix = subprocess.check_output(
-            ["brew", "--prefix"], text=True).strip()
+        prefix = subprocess.check_output(["brew", "--prefix"], text=True).strip()
         cmake_args.append(f"-DCMAKE_PREFIX_PATH={prefix}")
 
     build_dir = cache / "build"
-    subprocess.run(["cmake", "-S", str(source), "-B", str(build_dir),
-                    "-G", "Ninja", *cmake_args], check=True)
-    subprocess.run(["cmake", "--build", str(build_dir), "--target", *TARGETS,
-                    "-j", str(min(os.cpu_count() or 2, 8))], check=True)
+    subprocess.run(
+        ["cmake", "-S", str(source), "-B", str(build_dir), "-G", "Ninja", *cmake_args],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "cmake",
+            "--build",
+            str(build_dir),
+            "--target",
+            *TARGETS,
+            "-j",
+            str(min(os.cpu_count() or 2, 8)),
+        ],
+        check=True,
+    )
 
     DESTINATION.mkdir(parents=True, exist_ok=True)
     for name in TARGETS:

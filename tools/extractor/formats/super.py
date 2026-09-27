@@ -20,8 +20,8 @@ LP_SECTOR_SIZE = 512
 LP_TARGET_TYPE_LINEAR = 0
 LP_TARGET_TYPE_ZERO = 1
 
-GEOMETRY_FORMAT = '<II32sIII'
-HEADER_FORMAT = '<IHHI32sI32s12I'
+GEOMETRY_FORMAT = "<II32sIII"
+HEADER_FORMAT = "<IHHI32sI32s12I"
 HEADER_CHECKSUM = slice(12, 44)
 TABLES_CHECKSUM = slice(48, 80)
 
@@ -33,14 +33,17 @@ MB = 1024 * 1024
 GEOMETRY_LOCATIONS = (
     (0, 0),
     (LP_PARTITION_RESERVED_BYTES, LP_PARTITION_RESERVED_BYTES),
-    (LP_PARTITION_RESERVED_BYTES + LP_METADATA_GEOMETRY_SIZE,
-     LP_PARTITION_RESERVED_BYTES),
+    (
+        LP_PARTITION_RESERVED_BYTES + LP_METADATA_GEOMETRY_SIZE,
+        LP_PARTITION_RESERVED_BYTES,
+    ),
 )
 
 
 class LpExtent:
-    def __init__(self, num_sectors: int, target_type: int, target_data: int,
-                 target_source: int):
+    def __init__(
+        self, num_sectors: int, target_type: int, target_data: int, target_source: int
+    ):
         self.num_sectors = num_sectors
         self.target_type = target_type
         self.target_data = target_data
@@ -65,12 +68,11 @@ class LpPartition:
         return sum(ext.num_bytes for ext in self.extents)
 
 
-def _table_entries(f, offset: int, count: int, entry_size: int,
-                   min_size: int):
+def _table_entries(f, offset: int, count: int, entry_size: int, min_size: int):
     f.seek(offset)
     raw = f.read(count * entry_size)
     for i in range(count):
-        entry = raw[i * entry_size:(i + 1) * entry_size]
+        entry = raw[i * entry_size : (i + 1) * entry_size]
         if len(entry) >= min_size:
             yield entry[:min_size]
 
@@ -90,11 +92,10 @@ def _find_geometry(f, file_size: int):
 def _read_header(f, offset: int, max_size: int) -> Optional[bytes]:
     f.seek(offset)
     head = f.read(128)
-    if (len(head) < 128
-            or struct.unpack('<I', head[:4])[0] != LP_METADATA_HEADER_MAGIC):
+    if len(head) < 128 or struct.unpack("<I", head[:4])[0] != LP_METADATA_HEADER_MAGIC:
         return None
 
-    header_size = struct.unpack('<I', head[8:12])[0]
+    header_size = struct.unpack("<I", head[8:12])[0]
     if not 128 <= header_size <= LP_METADATA_GEOMETRY_SIZE:
         return None
     f.seek(offset)
@@ -106,7 +107,7 @@ def _read_header(f, offset: int, max_size: int) -> Optional[bytes]:
     if hashlib.sha256(header).digest() != checksum:
         return None
 
-    tables_size = struct.unpack('<I', head[44:48])[0]
+    tables_size = struct.unpack("<I", head[44:48])[0]
     if tables_size > max_size - header_size:
         return None
     tables = f.read(tables_size)
@@ -136,27 +137,45 @@ def read_lp_metadata(f) -> Optional[Dict[str, LpPartition]]:
         return None
 
     (
-        _, _, _, header_size, _, _, _,
-        part_offset, part_num_entries, part_entry_size,
-        ext_offset, ext_num_entries, ext_entry_size,
-        _, _, _, _, _, _,
+        _,
+        _,
+        _,
+        header_size,
+        _,
+        _,
+        _,
+        part_offset,
+        part_num_entries,
+        part_entry_size,
+        ext_offset,
+        ext_num_entries,
+        ext_entry_size,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
     ) = struct.unpack(HEADER_FORMAT, hdr_data)
     tables_start = hdr_offset + header_size
 
     extents = [
-        LpExtent(*struct.unpack('<QIQI', entry))
-        for entry in _table_entries(f, tables_start + ext_offset,
-                                    ext_num_entries, ext_entry_size, 24)
+        LpExtent(*struct.unpack("<QIQI", entry))
+        for entry in _table_entries(
+            f, tables_start + ext_offset, ext_num_entries, ext_entry_size, 24
+        )
     ]
 
     partitions: Dict[str, LpPartition] = {}
-    for entry in _table_entries(f, tables_start + part_offset,
-                                part_num_entries, part_entry_size, 52):
-        raw_name, _, first_ext, num_ext, _ = struct.unpack('<36sIIII', entry)
-        name = raw_name.decode('utf-8', errors='ignore').rstrip('\x00')
+    for entry in _table_entries(
+        f, tables_start + part_offset, part_num_entries, part_entry_size, 52
+    ):
+        raw_name, _, first_ext, num_ext, _ = struct.unpack("<36sIIII", entry)
+        name = raw_name.decode("utf-8", errors="ignore").rstrip("\x00")
         if name:
             partitions[name] = LpPartition(
-                name, extents[first_ext:first_ext + num_ext])
+                name, extents[first_ext : first_ext + num_ext]
+            )
     return partitions
 
 
@@ -164,7 +183,7 @@ def is_super_image(file_path: str) -> bool:
     if not os.path.isfile(file_path) or sparse.is_sparse(file_path):
         return False
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             return read_lp_metadata(f) is not None
     except OSError:
         return False
@@ -172,27 +191,26 @@ def is_super_image(file_path: str) -> bool:
 
 def _write_partition(f, part: LpPartition, out_path: str):
     with tempfile.TemporaryDirectory(
-            prefix='lp-partition-', dir=os.path.dirname(out_path)) as scratch:
-        candidate = os.path.join(scratch, 'partition.img')
+        prefix="lp-partition-", dir=os.path.dirname(out_path)
+    ) as scratch:
+        candidate = os.path.join(scratch, "partition.img")
         _copy_partition(f, part, candidate)
         os.replace(candidate, out_path)
 
 
 def _copy_partition(f, part: LpPartition, out_path: str):
-    with open(out_path, 'wb') as out_f:
+    with open(out_path, "wb") as out_f:
         out_size = 0
         for ext in part.extents:
             if ext.target_type == LP_TARGET_TYPE_LINEAR:
                 if ext.target_source != 0:
-                    raise RuntimeError(
-                        f"Unsupported LP block device for {part.name}")
+                    raise RuntimeError(f"Unsupported LP block device for {part.name}")
                 f.seek(ext.file_offset)
                 remaining = ext.num_bytes
                 while remaining > 0:
                     buf = f.read(min(remaining, MB))
                     if not buf:
-                        raise RuntimeError(
-                            f"Truncated LP extent for {part.name}")
+                        raise RuntimeError(f"Truncated LP extent for {part.name}")
                     out_f.write(buf)
                     remaining -= len(buf)
                     out_size += len(buf)
@@ -200,39 +218,45 @@ def _copy_partition(f, part: LpPartition, out_path: str):
                 out_f.seek(ext.num_bytes, os.SEEK_CUR)
                 out_size += ext.num_bytes
             else:
-                raise RuntimeError(
-                    f"Unsupported LP extent type for {part.name}")
+                raise RuntimeError(f"Unsupported LP extent type for {part.name}")
         out_f.truncate(out_size)
 
 
-def _extract_system_payload(active_path: str, output_dir: str,
-                            metadata_path: str, temp_raw: Optional[str],
-                            targets: Optional[Set[str]]) -> Optional[str]:
-    if targets is not None and 'system' not in targets:
+def _extract_system_payload(
+    active_path: str,
+    output_dir: str,
+    metadata_path: str,
+    temp_raw: Optional[str],
+    targets: Optional[Set[str]],
+) -> Optional[str]:
+    if targets is not None and "system" not in targets:
         return None
 
-    with open(metadata_path, 'rb') as metadata_file:
+    with open(metadata_path, "rb") as metadata_file:
         partitions = read_lp_metadata(metadata_file)
     if partitions is None:
         return None
 
-    system = partitions.get('system_a') or partitions.get('system')
+    system = partitions.get("system_a") or partitions.get("system")
     if system is None or len(system.extents) != 1:
         return None
     extent = system.extents[0]
-    if (extent.target_type != LP_TARGET_TYPE_LINEAR
-            or extent.target_source != 0
-            or extent.num_bytes != os.path.getsize(active_path)
-            or detect_filesystem(active_path) == 'unknown'):
+    if (
+        extent.target_type != LP_TARGET_TYPE_LINEAR
+        or extent.target_source != 0
+        or extent.num_bytes != os.path.getsize(active_path)
+        or detect_filesystem(active_path) == "unknown"
+    ):
         return None
 
-    out_path = os.path.join(output_dir, 'system.img')
+    out_path = os.path.join(output_dir, "system.img")
     if temp_raw:
         os.replace(temp_raw, out_path)
     else:
         with tempfile.TemporaryDirectory(
-                prefix='lp-system-', dir=output_dir) as scratch:
-            candidate = os.path.join(scratch, 'system.img')
+            prefix="lp-system-", dir=output_dir
+        ) as scratch:
+            candidate = os.path.join(scratch, "system.img")
             shutil.copyfile(active_path, candidate)
             os.replace(candidate, out_path)
     return out_path
@@ -243,7 +267,7 @@ def unpack_super(
     output_dir: str,
     target_partitions: Optional[Set[str]] = None,
     logger=None,
-    metadata_path: Optional[str] = None
+    metadata_path: Optional[str] = None,
 ) -> List[str]:
     """Extract dynamic partitions from a raw or sparse super.img."""
     if not os.path.isfile(super_path):
@@ -259,7 +283,8 @@ def unpack_super(
             if logger:
                 logger("Unsparsing super.img...")
             fd, temp_raw = tempfile.mkstemp(
-                prefix="super_raw_", suffix=".img", dir=output_dir)
+                prefix="super_raw_", suffix=".img", dir=output_dir
+            )
             os.close(fd)
             supplied = []
             if not sparse.unsparse(super_path, temp_raw, supplied=supplied):
@@ -268,51 +293,59 @@ def unpack_super(
                 return []
             active_path = temp_raw
 
-        with open(active_path, 'rb') as f:
+        with open(active_path, "rb") as f:
             partitions = read_lp_metadata(f)
             if partitions is None:
                 f.close()
-                targets = ({p.lower() for p in target_partitions}
-                           if target_partitions else None)
+                targets = (
+                    {p.lower() for p in target_partitions}
+                    if target_partitions
+                    else None
+                )
                 if metadata_path:
                     system_path = _extract_system_payload(
-                        active_path, output_dir, metadata_path, temp_raw,
-                        targets)
+                        active_path, output_dir, metadata_path, temp_raw, targets
+                    )
                     if system_path:
                         if logger:
-                            logger('Extracting system from super.img...')
+                            logger("Extracting system from super.img...")
                         return [system_path]
                 if logger:
                     logger("No valid LP metadata found in super.img")
                 return []
 
             extracted = []
-            targets = ({p.lower() for p in target_partitions}
-                       if target_partitions else None)
+            targets = (
+                {p.lower() for p in target_partitions} if target_partitions else None
+            )
 
             for name, part in partitions.items():
-                base_name = name[:-2] if name.endswith(('_a', '_b')) else name
-                if (targets is not None and name.lower() not in targets
-                        and base_name.lower() not in targets):
+                base_name = name[:-2] if name.endswith(("_a", "_b")) else name
+                if (
+                    targets is not None
+                    and name.lower() not in targets
+                    and base_name.lower() not in targets
+                ):
                     continue
                 if part.num_bytes == 0:
                     continue
                 if supplied is not None and not any(
-                        left < ext.file_offset + ext.num_bytes
-                        and right > ext.file_offset
-                        for ext in part.extents
-                        if ext.target_type == LP_TARGET_TYPE_LINEAR
-                        for left, right in supplied):
+                    left < ext.file_offset + ext.num_bytes and right > ext.file_offset
+                    for ext in part.extents
+                    if ext.target_type == LP_TARGET_TYPE_LINEAR
+                    for left, right in supplied
+                ):
                     continue
                 # With both slots populated, slot a is the one postprocess
                 # keeps; extracting b too only wastes time and disk.
-                slot_a = partitions.get(base_name + '_a')
-                if name.endswith('_b') and slot_a and slot_a.num_bytes:
+                slot_a = partitions.get(base_name + "_a")
+                if name.endswith("_b") and slot_a and slot_a.num_bytes:
                     continue
 
                 if logger:
-                    logger(f"Extracting partition {name} "
-                           f"({part.num_bytes // MB} MB)...")
+                    logger(
+                        f"Extracting partition {name} ({part.num_bytes // MB} MB)..."
+                    )
 
                 out_path = os.path.join(output_dir, f"{name}.img")
                 _write_partition(f, part, out_path)

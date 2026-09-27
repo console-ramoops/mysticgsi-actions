@@ -12,7 +12,8 @@ MKE2FS = find_tool("mke2fs")
 E2FSDROID = find_tool("e2fsdroid")
 
 pytestmark = pytest.mark.skipif(
-    not (MKE2FS and E2FSDROID), reason="needs mke2fs and e2fsdroid")
+    not (MKE2FS and E2FSDROID), reason="needs mke2fs and e2fsdroid"
+)
 
 
 def _populate(src):
@@ -33,7 +34,7 @@ def _tree(root):
             if os.path.islink(path):
                 tree[rel] = ("link", os.readlink(path))
             else:
-                with open(path, 'rb') as f:
+                with open(path, "rb") as f:
                     tree[rel] = ("file", f.read())
     return tree
 
@@ -42,24 +43,47 @@ def _tree(root):
 # 64-byte group descriptors with metadata_csum dirent tails, ext3-style
 # block maps (1 KiB blocks push the big file into double-indirect blocks)
 # and inline data in i_block plus the system.data xattr.
-@pytest.mark.parametrize("features,block_size", [
-    ("^has_journal", 4096),
-    ("^has_journal,64bit,metadata_csum", 4096),
-    ("^has_journal,^extent", 1024),
-    ("^has_journal,inline_data", 4096),
-])
-def test_extract_matches_source_across_block_groups(tmp_path, features,
-                                                    block_size):
+@pytest.mark.parametrize(
+    "features,block_size",
+    [
+        ("^has_journal", 4096),
+        ("^has_journal,64bit,metadata_csum", 4096),
+        ("^has_journal,^extent", 1024),
+        ("^has_journal,inline_data", 4096),
+    ],
+)
+def test_extract_matches_source_across_block_groups(tmp_path, features, block_size):
     src = tmp_path / "src"
     _populate(src)
     image = str(tmp_path / "system.img")
     subprocess.run(
-        [MKE2FS, "-q", "-O", features, "-t", "ext4", "-b", str(block_size),
-         "-I", "256", "-N", "8192", "-g", "4096", image, "40000"],
+        [
+            MKE2FS,
+            "-q",
+            "-O",
+            features,
+            "-t",
+            "ext4",
+            "-b",
+            str(block_size),
+            "-I",
+            "256",
+            "-N",
+            "8192",
+            "-g",
+            "4096",
+            image,
+            "40000",
+        ],
         env=dict(os.environ, MKE2FS_CONFIG=MKE2FS_CONFIG),
-        check=True, capture_output=True)
-    subprocess.run([E2FSDROID, "-e", "-f", str(src), "-a", "/", image],
-                   check=True, capture_output=True)
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [E2FSDROID, "-e", "-f", str(src), "-a", "/", image],
+        check=True,
+        capture_output=True,
+    )
 
     out = tmp_path / "out"
     assert extract_ext4(image, str(out))

@@ -1,2 +1,0 @@
-[flake8]
-exclude = .git,.github,.venv,tmp,out,*_pb2.py,tools/avb/avbtool.py

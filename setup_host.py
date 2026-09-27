@@ -3,7 +3,7 @@
 Installs MysticGSI's dependencies on macOS, Debian/Ubuntu, Arch and NixOS.
 
   ./setup_host.py          runtime dependencies
-  ./setup_host.py --dev    plus pytest and flake8
+  ./setup_host.py --dev    plus pytest and Ruff
 
 Safe to re-run: package managers skip what is installed, and the native
 image tools are only rebuilt when missing.
@@ -23,27 +23,62 @@ VENV = os.path.join(ROOT, ".venv")
 VENV_PYTHON = os.path.join(VENV, "bin", "python")
 REQUIREMENTS = os.path.join(ROOT, "requirements.txt")
 MIN_PYTHON = (3, 10)
-APKTOOL_RELEASE = ("https://api.github.com/repos/iBotPeaches/Apktool/"
-                   "releases/latest")
+APKTOOL_RELEASE = "https://api.github.com/repos/iBotPeaches/Apktool/releases/latest"
 
 BREW_PACKAGES = [
-    "python@3.13", "cmake", "ninja", "pkgconf", "erofs-utils", "brotli",
-    "lz4", "pcre2", "libusb", "zstd", "protobuf", "aria2", "apktool",
-    "gpatch", "openssl@3",
+    "python@3.13",
+    "cmake",
+    "ninja",
+    "pkgconf",
+    "erofs-utils",
+    "brotli",
+    "lz4",
+    "pcre2",
+    "libusb",
+    "zstd",
+    "protobuf",
+    "aria2",
+    "apktool",
+    "gpatch",
+    "openssl@3",
 ]
 
 APT_PACKAGES = [
-    "python3", "python3-venv", "python3-pip", "erofs-utils", "aria2",
-    "patch", "default-jre-headless", "curl", "ca-certificates",
+    "python3",
+    "python3-venv",
+    "python3-pip",
+    "erofs-utils",
+    "aria2",
+    "patch",
+    "default-jre-headless",
+    "curl",
+    "ca-certificates",
     "libarchive-tools",
-    "build-essential", "cmake", "ninja-build", "pkg-config", "perl",
-    "golang-go", "libgtest-dev", "libusb-1.0-0-dev", "libpcre2-dev",
-    "libprotobuf-dev", "protobuf-compiler", "libbrotli-dev", "liblz4-dev",
-    "libzstd-dev", "openssl",
+    "build-essential",
+    "cmake",
+    "ninja-build",
+    "pkg-config",
+    "perl",
+    "golang-go",
+    "libgtest-dev",
+    "libusb-1.0-0-dev",
+    "libpcre2-dev",
+    "libprotobuf-dev",
+    "protobuf-compiler",
+    "libbrotli-dev",
+    "liblz4-dev",
+    "libzstd-dev",
+    "openssl",
 ]
 PACMAN_PACKAGES = [
-    "python", "python-pip", "erofs-utils", "aria2", "patch",
-    "android-tools", "curl", "openssl",
+    "python",
+    "python-pip",
+    "erofs-utils",
+    "aria2",
+    "patch",
+    "android-tools",
+    "curl",
+    "openssl",
 ]
 # The source package builds apktool with its own JDK and Gradle.
 AUR_APKTOOL = "android-apktool-bin"
@@ -82,8 +117,12 @@ def run(cmd):
 
 def succeeds(cmd):
     try:
-        return subprocess.run(cmd, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL).returncode == 0
+        return (
+            subprocess.run(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
     except FileNotFoundError:
         return False
 
@@ -111,8 +150,9 @@ def make_venv(python):
 
 
 def native_tools_present():
-    result = subprocess.run([VENV_PYTHON, "-c", NATIVE_TOOLS_CHECK],
-                            capture_output=True, text=True)
+    result = subprocess.run(
+        [VENV_PYTHON, "-c", NATIVE_TOOLS_CHECK], capture_output=True, text=True
+    )
     if result.returncode not in (0, 3):
         die(f"cannot load the tools package:\n{result.stderr.strip()}")
     return result.returncode == 0
@@ -148,8 +188,10 @@ def copy_with_progress(response, f, width=30):
 def download(url, path):
     partial = path + ".part"
     try:
-        with urllib.request.urlopen(url, timeout=30) as response, \
-                open(partial, "wb") as f:
+        with (
+            urllib.request.urlopen(url, timeout=30) as response,
+            open(partial, "wb") as f,
+        ):
             copy_with_progress(response, f)
     except OSError as e:
         if os.path.exists(partial):
@@ -181,8 +223,10 @@ def install_apktool():
                     and a["name"].endswith(".jar")), None)
     except (OSError, ValueError, KeyError) as e:
         warn(f"cannot query latest apktool release ({e}); trying fallback")
-        url = ("https://github.com/iBotPeaches/Apktool/releases/download/"
-               "v3.0.3/apktool_3.0.3.jar")
+        url = (
+            "https://github.com/iBotPeaches/Apktool/releases/download/"
+            "v3.0.3/apktool_3.0.3.jar"
+        )
     if not url:
         die("the latest apktool release has no jar")
 
@@ -196,8 +240,10 @@ def install_apktool():
     os.chmod(wrapper, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     if bin_dir not in os.environ.get("PATH", "").split(os.pathsep):
-        warn(f"{bin_dir} is not on PATH; add it to your shell profile "
-             "so builds can find apktool")
+        warn(
+            f"{bin_dir} is not on PATH; add it to your shell profile "
+            "so builds can find apktool"
+        )
 
 
 def aur_helper():
@@ -215,13 +261,14 @@ def install_apktool_from_aur():
     helper = aur_helper()
     # The AUR package wants a full java-runtime; pulling one in on top of
     # a headless JRE would make the helper offer to replace it.
-    if (shutil.which("apktool") or not helper
-            or not pacman_satisfied("java-runtime")):
+    if shutil.which("apktool") or not helper or not pacman_satisfied("java-runtime"):
         return
     log(f"Installing apktool from the AUR with {helper}")
     if subprocess.run([helper, "-S", "--needed", AUR_APKTOOL]).returncode:
-        warn(f"{helper} failed to install {AUR_APKTOOL}; "
-             "falling back to the upstream jar")
+        warn(
+            f"{helper} failed to install {AUR_APKTOOL}; "
+            "falling back to the upstream jar"
+        )
 
 
 def setup_macos():
@@ -233,8 +280,9 @@ def setup_macos():
     log("Installing Homebrew packages")
     run(["brew", "install"] + BREW_PACKAGES)
 
-    prefix = subprocess.run(["brew", "--prefix", "python@3.13"],
-                            capture_output=True, text=True, check=True)
+    prefix = subprocess.run(
+        ["brew", "--prefix", "python@3.13"], capture_output=True, text=True, check=True
+    )
     make_venv(os.path.join(prefix.stdout.strip(), "bin", "python3.13"))
     build_native_tools()
 
@@ -256,8 +304,7 @@ def setup_arch():
     packages = list(PACMAN_PACKAGES)
     # The full and headless JREs conflict, so never swap an installed one.
     if not pacman_satisfied("java-runtime-headless"):
-        packages.append("jre-openjdk" if aur_helper()
-                        else "jre-openjdk-headless")
+        packages.append("jre-openjdk" if aur_helper() else "jre-openjdk-headless")
     as_root(["pacman", "-Syu", "--needed"] + packages)
 
     make_venv("python")
@@ -271,8 +318,19 @@ def setup_nixos():
     if not shutil.which("nix"):
         die("nix not found")
     log("Building the nix dev shell")
-    run(["nix", "--extra-experimental-features", "nix-command flakes",
-         "develop", ROOT, "--command", "python3", "-c", "import tools"])
+    run(
+        [
+            "nix",
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "develop",
+            ROOT,
+            "--command",
+            "python3",
+            "-c",
+            "import tools",
+        ]
+    )
     log("Done. Enter the environment with: nix develop")
     log("Then run builds with: python3 cli.py build <name> <firmware>")
 
@@ -281,13 +339,18 @@ def setup_nixos():
 def check_erofs():
     has_extract = False
     if shutil.which("fsck.erofs"):
-        result = subprocess.run(["fsck.erofs", "--help"], text=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT)
+        result = subprocess.run(
+            ["fsck.erofs", "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         has_extract = "--extract" in result.stdout
     if not has_extract:
-        warn("fsck.erofs with --extract (erofs-utils >= 1.5) not found; "
-             "EROFS partitions can't be unpacked")
+        warn(
+            "fsck.erofs with --extract (erofs-utils >= 1.5) not found; "
+            "EROFS partitions can't be unpacked"
+        )
 
 
 def detect_linux():
@@ -302,12 +365,14 @@ def detect_linux():
         die("cannot identify this Linux distribution")
 
     ids = [fields.get("ID", "")] + fields.get("ID_LIKE", "").split()
-    for distro, aliases in (("nixos", {"nixos"}), ("arch", {"arch"}),
-                            ("debian", {"debian", "ubuntu"})):
+    for distro, aliases in (
+        ("nixos", {"nixos"}),
+        ("arch", {"arch"}),
+        ("debian", {"debian", "ubuntu"}),
+    ):
         if aliases.intersection(ids):
             return distro
-    die(f"unsupported distribution '{fields.get('ID') or 'unknown'}'; "
-        "see README.md")
+    die(f"unsupported distribution '{fields.get('ID') or 'unknown'}'; see README.md")
 
 
 def main():
@@ -337,8 +402,7 @@ def main():
     log("Checking the environment")
     run([VENV_PYTHON, "-c", "import tools; tools.check_environment()"])
     check_erofs()
-    log("Done. Build a GSI with: "
-        ".venv/bin/python cli.py build <name> <firmware>")
+    log("Done. Build a GSI with: .venv/bin/python cli.py build <name> <firmware>")
 
 
 if __name__ == "__main__":
