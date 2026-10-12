@@ -74,11 +74,12 @@ def setup_macos(dev):
 
 def setup_debian(dev):
     print("Installing apt packages")
-    as_root(["apt-get", "update"])
-    as_root(["apt-get", "install", "-y", *APT_PACKAGES])
+    noninteractive = ["env", "DEBIAN_FRONTEND=noninteractive"]
+    as_root(noninteractive + ["apt-get", "update"])
+    as_root(noninteractive + ["apt-get", "install", "-y", *APT_PACKAGES])
     if not shutil.which("java"):
         print("Java not found. Installing default-jre-headless")
-        as_root(["apt-get", "install", "-y", "default-jre-headless"])
+        as_root(noninteractive + ["apt-get", "install", "-y", "default-jre-headless"])
     make_venv("python3", dev)
 
 
